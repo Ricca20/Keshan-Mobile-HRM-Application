@@ -116,7 +116,7 @@ export function VerificationClient({
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500 font-bold bg-white">
+                <tr className="border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500 font-bold bg-white whitespace-nowrap">
                   <th className="p-4">Employee</th>
                   <th className="p-4">Sent At</th>
                   <th className="p-4">Status</th>

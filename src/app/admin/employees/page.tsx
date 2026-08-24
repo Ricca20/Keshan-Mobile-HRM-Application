@@ -137,13 +137,13 @@ export default function AdminEmployeesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-sm">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Employees</h1>
           <p className="text-slate-500 text-sm mt-1">Manage staff accounts, salaries, and shop assignments.</p>
         </div>
         {!showForm && (
-          <Button onClick={handleAddNew} className="shadow-lg shadow-blue-500/20">
+          <Button onClick={handleAddNew} className="w-full sm:w-auto shadow-lg shadow-blue-500/20">
             <Plus className="mr-2 h-4 w-4" /> Add Employee
           </Button>
         )}

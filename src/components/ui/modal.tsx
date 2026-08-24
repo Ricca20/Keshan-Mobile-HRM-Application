@@ -38,7 +38,7 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md' 
       />
       
       {/* Modal Content */}
-      <div className={`relative w-full ${maxWidth} bg-white rounded-2xl shadow-xl shadow-slate-900/10 animate-in fade-in zoom-in-95 duration-200`}>
+      <div className={`relative w-full max-w-[calc(100vw-2rem)] sm:${maxWidth} bg-white rounded-2xl shadow-xl shadow-slate-900/10 animate-in fade-in zoom-in-95 duration-200`}>
         <div className="flex items-center justify-between p-6 border-b border-slate-100">
           <h3 className="text-lg font-bold text-slate-900">{title}</h3>
           <button 

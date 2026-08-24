@@ -89,7 +89,7 @@ export default function LeaveTypesPage() {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-6 rounded-2xl border border-slate-200 shadow-sm gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-sm gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Leave Types</h1>
           <p className="text-slate-500 text-sm mt-1">Manage leave policies and allowances.</p>

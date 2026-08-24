@@ -120,7 +120,7 @@ export default function AdminPaysheetsPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/80 text-xs uppercase tracking-wider font-bold text-slate-500">
+                  <tr className="border-b border-slate-200 bg-slate-50/80 text-xs uppercase tracking-wider font-bold text-slate-500 whitespace-nowrap">
                     <th className="px-6 py-4">Employee</th>
                     <th className="px-6 py-4">Shop</th>
                     <th className="px-6 py-4">Base Salary</th>
