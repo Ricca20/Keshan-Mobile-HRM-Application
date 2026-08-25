@@ -26,6 +26,14 @@ export async function GET(req: Request) {
         data: { status: 'MISSED' }
       })
 
+      // Auto-increment penalty points for each missed verification
+      for (const v of expiredVerifications) {
+        await prisma.user.update({
+          where: { id: v.userId },
+          data: { penaltyPoints: { increment: 1 } }
+        })
+      }
+
       // Notify Admins about missed verifications
       const admins = await prisma.user.findMany({ where: { role: 'ADMIN', isActive: true } })
       for (const v of expiredVerifications) {
@@ -34,7 +42,7 @@ export async function GET(req: Request) {
             data: {
               userId: admin.id,
               title: 'Missed Work Verification',
-              message: `${v.user.name} missed their active work verification.`,
+              message: `${v.user.name} missed their work verification. Penalty point added automatically (now ${v.user.penaltyPoints + 1} pts).`,
               type: 'VERIFICATION_MISSED'
             }
           })
@@ -42,8 +50,8 @@ export async function GET(req: Request) {
           await sendNotificationEmail({
             to: admin.email,
             subject: 'Missed Work Verification - PhoneShop HRM',
-            html: `<p><strong>${v.user.name}</strong> missed a random active work verification check at ${now.toLocaleTimeString()}.</p>
-                   <p>Please review this in the admin dashboard and assign a penalty point if necessary.</p>`
+            html: `<p><strong>${v.user.name}</strong> missed a random active work verification check at ${now.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo' })}.</p>
+                   <p>A penalty point has been <strong>automatically added</strong>. Their current total is <strong>${v.user.penaltyPoints + 1} point(s)</strong>.</p>`
           })
         }
       }

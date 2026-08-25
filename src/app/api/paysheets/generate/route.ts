@@ -14,9 +14,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Month and year are required' }, { status: 400 })
     }
 
-    // Get penalty setting
-    const penaltySetting = await prisma.systemSetting.findUnique({ where: { key: 'PENALTY_AMOUNT' } })
-    const penaltyPerPoint = penaltySetting ? Number(penaltySetting.value) : 500
+    // Get penalty settings
+    const penaltyAmountSetting = await prisma.systemSetting.findUnique({ where: { key: 'PENALTY_AMOUNT' } })
+    const penaltyThresholdSetting = await prisma.systemSetting.findUnique({ where: { key: 'PENALTY_THRESHOLD' } })
+    
+    const penaltyAmount = penaltyAmountSetting ? Number(penaltyAmountSetting.value) : 1000
+    const penaltyThreshold = penaltyThresholdSetting ? Number(penaltyThresholdSetting.value) : 10
 
     const startDate = new Date(year, month - 1, 1)
     const endDate = new Date(year, month, 0, 23, 59, 59, 999)
@@ -30,14 +33,6 @@ export async function POST(req: Request) {
             type: 'IN',
             isValid: true
           }
-        },
-        leaveRequests: {
-          where: {
-            status: 'APPROVED',
-            startDate: { gte: startDate, lte: endDate },
-            leaveType: { isPaid: false }
-          },
-          include: { leaveType: true }
         }
       }
     })
@@ -55,31 +50,49 @@ export async function POST(req: Request) {
         where: { userId: user.id, month, year, status: 'FINALIZED' }
       })
       
-      if (existingFinal) continue // Skip if already finalized
+      if (existingFinal) continue
 
       // 1. Base Salary
       const baseSalary = user.salary || 0
 
       // 2. Count distinct working days clocked in
-      const workingDays = new Set(user.clockLogs.map(log => new Date(log.timestamp).toLocaleDateString())).size
+      const workingDays = new Set(
+        user.clockLogs.map(log => 
+          new Date(log.timestamp).toLocaleDateString('en-US', { timeZone: 'Asia/Colombo' })
+        )
+      ).size
 
-      // 3. Unpaid Leaves
-      let unpaidDays = 0
-      user.leaveRequests.forEach(req => {
-        unpaidDays += req.totalDays
+      // 3. Unpaid Leaves — separate query to avoid nested filter issues
+      const unpaidLeaves = await prisma.leaveRequest.findMany({
+        where: {
+          userId: user.id,
+          status: 'APPROVED',
+          startDate: { lte: endDate },
+          endDate: { gte: startDate },
+        },
+        include: { leaveType: true }
       })
+
+      let unpaidDays = 0
+      for (const leave of unpaidLeaves) {
+        if (!leave.leaveType.isPaid) {
+          unpaidDays += leave.totalDays
+        }
+      }
 
       const unpaidDeduction = (baseSalary / 30) * unpaidDays
 
-      // 4. Penalty Deduction
-      const penaltyDeduction = user.penaltyPoints * penaltyPerPoint
+      // 4. Penalty Deduction (bulk threshold system)
+      // e.g., threshold=10, amount=1000: 15 points → 1 bulk → Rs 1000, 25 points → 2 bulks → Rs 2000
+      const penaltyBulks = Math.floor(user.penaltyPoints / penaltyThreshold)
+      const penaltyDeduction = penaltyBulks * penaltyAmount
 
       // 5. Total Deductions
       const totalDeductions = unpaidDeduction + penaltyDeduction
       
       let deductionNote = ''
       if (unpaidDays > 0) deductionNote += `Unpaid Leave (${unpaidDays} days). `
-      if (user.penaltyPoints > 0) deductionNote += `Penalty Points (${user.penaltyPoints}).`
+      if (penaltyBulks > 0) deductionNote += `Penalty (${user.penaltyPoints} pts × ${penaltyThreshold}/bulk = ${penaltyBulks} × Rs.${penaltyAmount}).`
 
       // 6. Net Pay
       let netPay = baseSalary - totalDeductions
@@ -94,7 +107,7 @@ export async function POST(req: Request) {
           paidDays: workingDays,
           unpaidDays,
           deductions: totalDeductions,
-          deductionNote: deductionNote.trim(),
+          deductionNote: deductionNote.trim() || null,
           netPay,
           status: 'DRAFT'
         }
@@ -104,10 +117,10 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ 
       success: true, 
-      message: `Successfully generated ${generatedCount} paysheets.` 
+      message: `Successfully generated ${generatedCount} paysheet(s).` 
     })
-  } catch (error) {
-    console.error('Generate Paysheets Error:', error)
-    return NextResponse.json({ error: 'Failed to generate paysheets' }, { status: 500 })
+  } catch (error: any) {
+    console.error('Generate Paysheets Error:', error?.message || error)
+    return NextResponse.json({ error: error?.message || 'Failed to generate paysheets' }, { status: 500 })
   }
 }

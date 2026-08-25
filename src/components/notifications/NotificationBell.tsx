@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Bell, Check, Clock, FileText, CalendarDays, Receipt } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Bell, Check, Clock, FileText, CalendarDays, Receipt, ShieldAlert } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useSession } from 'next-auth/react'
 
 type Notification = {
   id: string
@@ -15,10 +17,36 @@ type Notification = {
   createdAt: string
 }
 
+function getNotificationRoute(type: string, role: string): string | null {
+  if (role === 'ADMIN') {
+    switch (type) {
+      case 'LEAVE_REQUEST': return '/admin/leave'
+      case 'LEAVE_APPROVED': return '/admin/leave'
+      case 'LEAVE_REJECTED': return '/admin/leave'
+      case 'PAYROLL': return '/admin/paysheets'
+      case 'VERIFICATION_MISSED': return '/admin/verification'
+      case 'SYSTEM': return '/admin/dashboard'
+      default: return '/admin/dashboard'
+    }
+  } else {
+    switch (type) {
+      case 'LEAVE_APPROVED': return '/employee/leave'
+      case 'LEAVE_REJECTED': return '/employee/leave'
+      case 'PAYROLL': return '/employee/paysheets'
+      case 'SYSTEM': return '/employee/dashboard'
+      default: return '/employee/dashboard'
+    }
+  }
+}
+
 export function NotificationBell() {
+  const router = useRouter()
+  const { data: session } = useSession()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+
+  const role = (session?.user as any)?.role || 'EMPLOYEE'
 
   const fetchNotifications = async () => {
     try {
@@ -36,22 +64,28 @@ export function NotificationBell() {
 
   useEffect(() => {
     fetchNotifications()
-    // Poll every 60 seconds
     const interval = setInterval(fetchNotifications, 60000)
     return () => clearInterval(interval)
   }, [])
 
-  const markAsRead = async (id: string) => {
-    // Optimistic UI update
-    setNotifications(prev => 
-      prev.map(n => n.id === id ? { ...n, isRead: true } : n)
-    )
+  const handleNotificationClick = async (n: Notification) => {
+    // Mark as read
+    if (!n.isRead) {
+      setNotifications(prev => 
+        prev.map(item => item.id === n.id ? { ...item, isRead: true } : item)
+      )
+      try {
+        await fetch(`/api/notifications/${n.id}`, { method: 'PATCH' })
+      } catch {
+        fetchNotifications()
+      }
+    }
 
-    try {
-      await fetch(`/api/notifications/${id}`, { method: 'PATCH' })
-    } catch (error) {
-      // Revert on error
-      fetchNotifications()
+    // Navigate
+    const route = getNotificationRoute(n.type, role)
+    if (route) {
+      setOpen(false)
+      router.push(route)
     }
   }
 
@@ -63,6 +97,8 @@ export function NotificationBell() {
       case 'LEAVE_APPROVED': return <Check className="w-4 h-4 text-emerald-500" />
       case 'LEAVE_REJECTED': return <Check className="w-4 h-4 text-red-500" />
       case 'PAYROLL': return <Receipt className="w-4 h-4 text-blue-500" />
+      case 'VERIFICATION_MISSED': return <ShieldAlert className="w-4 h-4 text-orange-500" />
+      case 'SYSTEM': return <FileText className="w-4 h-4 text-slate-500" />
       default: return <FileText className="w-4 h-4 text-slate-500" />
     }
   }
@@ -107,7 +143,7 @@ export function NotificationBell() {
                     "p-4 hover:bg-slate-50 transition-colors cursor-pointer flex gap-3 relative group",
                     !n.isRead && "bg-blue-50/30"
                   )}
-                  onClick={() => !n.isRead && markAsRead(n.id)}
+                  onClick={() => handleNotificationClick(n)}
                 >
                   {!n.isRead && (
                     <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500 rounded-r-full" />
@@ -124,7 +160,7 @@ export function NotificationBell() {
                     </p>
                     <p className="text-[10px] font-medium text-slate-400 mt-1.5 flex items-center gap-1 uppercase tracking-wider">
                       <Clock className="w-3 h-3" />
-                      {new Date(n.createdAt).toLocaleDateString()}
+                      {new Date(n.createdAt).toLocaleDateString('en-US', { timeZone: 'Asia/Colombo' })}
                     </p>
                   </div>
                 </div>
