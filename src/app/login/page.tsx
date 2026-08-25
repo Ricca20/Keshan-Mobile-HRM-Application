@@ -36,14 +36,16 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
+      const trimmedEmail = email.trim()
       const res = await signIn('credentials', {
-        email,
+        email: trimmedEmail,
         password,
         redirect: false,
       })
 
       if (res?.error) {
-        setError('Invalid email or password. Please try again.')
+        console.error('Login Error:', res.error)
+        setError(`Login failed: ${res.error}`)
         toast.error('Password wrong')
       } else {
         toast.success('Login success')

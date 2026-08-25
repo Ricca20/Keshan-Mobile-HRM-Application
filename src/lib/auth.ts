@@ -1,7 +1,15 @@
-import NextAuth from 'next-auth'
+import NextAuth, { CredentialsSignin } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
+
+class CustomAuthError extends CredentialsSignin {
+  code: string
+  constructor(message: string) {
+    super(message)
+    this.code = message
+  }
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
@@ -20,14 +28,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             include: { shop: true },
           })
 
-          if (!user) throw new Error('Debug: User not found in database for email: ' + credentials.email)
-          if (!user.isActive) throw new Error('Debug: User is not active.')
+          if (!user) throw new CustomAuthError('USER_NOT_FOUND')
+          if (!user.isActive) throw new CustomAuthError('USER_NOT_ACTIVE')
 
           const passwordMatch = await bcrypt.compare(
             credentials.password as string,
             user.password
           )
-          if (!passwordMatch) throw new Error('Debug: Password does not match hash. Input: ' + credentials.password)
+          if (!passwordMatch) throw new CustomAuthError('PASSWORD_MISMATCH')
 
           return {
             id: user.id,
@@ -38,7 +46,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           } as any
         } catch (e: any) {
           console.error("AUTHORIZE ERROR:", e)
-          throw e
+          if (e instanceof CustomAuthError) throw e
+          throw new CustomAuthError(e.message || 'UNKNOWN_ERROR')
         }
       },
     }),
