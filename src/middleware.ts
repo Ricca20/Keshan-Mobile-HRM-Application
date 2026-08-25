@@ -45,6 +45,7 @@ export async function middleware(req: NextRequest) {
   // Allow static assets, images, and API auth routes
   if (
     nextUrl.pathname.startsWith('/api/auth') ||
+    nextUrl.pathname.startsWith('/api/test-db') ||
     nextUrl.pathname.startsWith('/_next') ||
     nextUrl.pathname.match(/\.(jpg|jpeg|png|svg|ico|gif|webp)$/i)
   ) {
