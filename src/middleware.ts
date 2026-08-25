@@ -29,7 +29,13 @@ export async function middleware(req: NextRequest) {
   }
 
   const { nextUrl } = req
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || '' })
+  const isProduction = process.env.NODE_ENV === 'production'
+  const token = await getToken({ 
+    req, 
+    secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || '',
+    secureCookie: isProduction,
+    salt: isProduction ? '__Secure-authjs.session-token' : 'authjs.session-token'
+  })
 
   const isLoggedIn = !!token
   const isAuthRoute = nextUrl.pathname.startsWith('/login')
