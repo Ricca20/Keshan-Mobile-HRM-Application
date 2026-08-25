@@ -63,7 +63,7 @@ export async function middleware(req: NextRequest) {
 
   // Handle Logged In Users
   if (isLoggedIn) {
-    if (isAuthRoute) {
+    if (isAuthRoute || nextUrl.pathname === '/') {
       return NextResponse.redirect(new URL(token.role === 'ADMIN' ? '/admin/dashboard' : '/employee/dashboard', nextUrl))
     }
     

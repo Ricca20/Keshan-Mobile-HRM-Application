@@ -1,5 +1,3 @@
-import { auth } from '@/lib/auth'
-import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import {
@@ -18,17 +16,7 @@ import {
   Store,
 } from 'lucide-react'
 
-export default async function HomePage() {
-  const session = await auth()
-
-  // If already logged in, redirect to dashboard
-  if (session) {
-    if ((session.user as any)?.role === 'ADMIN') {
-      redirect('/admin/dashboard')
-    }
-    redirect('/employee/dashboard')
-  }
-
+export default function HomePage() {
   return (
     <div className="min-h-screen bg-white">
       {/* Navigation */}
