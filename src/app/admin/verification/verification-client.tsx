@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
-import { ShieldAlert, CheckCircle, Clock, XCircle, Users, Activity } from 'lucide-react'
+import { ShieldAlert, CheckCircle, Clock, XCircle, Users, Activity, Zap } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 
 type User = {
@@ -35,7 +35,6 @@ export function VerificationClient({
 }) {
   const router = useRouter()
   const [pinging, setPinging] = useState<string | null>(null)
-  const [penalizing, setPenalizing] = useState<string | null>(null)
 
   const handleManualPing = async (userId: string) => {
     setPinging(userId)
@@ -50,18 +49,6 @@ export function VerificationClient({
       console.error(e)
     } finally {
       setPinging(null)
-    }
-  }
-
-  const handlePenalize = async (id: string) => {
-    setPenalizing(id)
-    try {
-      await fetch(`/api/verification/penalize/${id}`, { method: 'POST' })
-      router.refresh()
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setPenalizing(null)
     }
   }
 
@@ -120,7 +107,7 @@ export function VerificationClient({
                   <th className="p-4">Employee</th>
                   <th className="p-4">Sent At</th>
                   <th className="p-4">Status</th>
-                  <th className="p-4 text-right">Action</th>
+                  <th className="p-4 text-right">Info</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
@@ -146,16 +133,14 @@ export function VerificationClient({
                       </td>
                       <td className="p-4 text-right">
                         {v.status === 'MISSED' && (
-                          <button
-                            onClick={() => handlePenalize(v.id)}
-                            disabled={penalizing === v.id}
-                            className="px-3 py-1.5 bg-red-100 text-red-700 hover:bg-red-200 rounded-lg text-xs font-bold transition disabled:opacity-50 inline-flex items-center gap-1"
-                          >
-                            Add Penalty Point
-                          </button>
+                          <span className="inline-flex items-center gap-1 text-xs font-bold text-orange-600 bg-orange-50 px-2.5 py-1 rounded-lg border border-orange-200">
+                            <Zap className="w-3 h-3" /> Auto-penalized
+                          </span>
                         )}
                         {v.status === 'PENALIZED' && (
-                          <span className="text-xs font-bold text-slate-400">Point Added</span>
+                          <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-400">
+                            <Zap className="w-3 h-3" /> Point Added
+                          </span>
                         )}
                       </td>
                     </tr>
