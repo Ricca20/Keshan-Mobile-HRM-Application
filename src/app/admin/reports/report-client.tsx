@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Download, FileSpreadsheet, TrendingUp, Users, CalendarDays } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -17,6 +17,11 @@ export function ReportClient({ attendanceStats, employeeNames }: ReportClientPro
   const today = new Date()
   const [filterMonth, setFilterMonth] = useState(today.getMonth() + 1)
   const [filterYear, setFilterYear] = useState(today.getFullYear())
+  const [isMounted, setIsMounted] = useState(false)
+
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   const handleExport = () => {
     window.location.href = `/api/paysheets/export?month=${filterMonth}&year=${filterYear}`
@@ -36,27 +41,31 @@ export function ReportClient({ attendanceStats, employeeNames }: ReportClientPro
             </div>
           </CardHeader>
           <CardContent className="pt-6 h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={attendanceStats} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} tickFormatter={(val) => `${val}h`} />
-                <RechartsTooltip cursor={{ stroke: '#f1f5f9', strokeWidth: 2 }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} formatter={(value: any) => [`${value} hrs`, undefined]} />
-                <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
-                {employeeNames.map((name, idx) => (
-                  <Line 
-                    key={name}
-                    type="monotone" 
-                    dataKey={name} 
-                    name={name} 
-                    stroke={COLORS[idx % COLORS.length]} 
-                    strokeWidth={3} 
-                    dot={{ r: 4, strokeWidth: 2 }} 
-                    activeDot={{ r: 6 }} 
-                  />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
+            {isMounted ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={attendanceStats} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} tickFormatter={(val) => `${val}h`} />
+                  <RechartsTooltip cursor={{ stroke: '#f1f5f9', strokeWidth: 2 }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} formatter={(value: any) => [`${value} hrs`, undefined]} />
+                  <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
+                  {employeeNames.map((name, idx) => (
+                    <Line 
+                      key={name}
+                      type="monotone" 
+                      dataKey={name} 
+                      name={name} 
+                      stroke={COLORS[idx % COLORS.length]} 
+                      strokeWidth={3} 
+                      dot={{ r: 4, strokeWidth: 2 }} 
+                      activeDot={{ r: 6 }} 
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-slate-400">Loading chart...</div>
+            )}
           </CardContent>
         </Card>
 
