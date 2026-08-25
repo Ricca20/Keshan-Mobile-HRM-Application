@@ -3,15 +3,12 @@ import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
+import crypto from 'crypto'
+import { sendNotificationEmail } from '@/lib/mail'
 
 const employeeSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   email: z.string().email('Invalid email address'),
-  password: z
-    .string()
-    .min(8, 'Password must be at least 8 characters')
-    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
-    .regex(/[0-9]/, 'Password must contain at least one number'),
   shopId: z.string().min(1, 'Shop assignment is required'),
   salary: z.number().min(0, 'Salary must be positive'),
 })
@@ -55,7 +52,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Email already exists' }, { status: 400 })
     }
 
-    const hashedPassword = await bcrypt.hash(validatedData.password, 12)
+    // Generate a secure random placeholder password
+    const randomPassword = crypto.randomBytes(16).toString('hex') + 'A1'
+    const hashedPassword = await bcrypt.hash(randomPassword, 12)
 
     const employee = await prisma.user.create({
       data: {
@@ -67,6 +66,37 @@ export async function POST(req: Request) {
         role: 'EMPLOYEE',
       },
       include: { shop: true }
+    })
+
+    // Generate setup token
+    const token = crypto.randomBytes(32).toString('hex')
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+
+    await prisma.passwordResetToken.create({
+      data: {
+        email: validatedData.email,
+        token,
+        expiresAt
+      }
+    })
+
+    const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
+    const setupUrl = `${baseUrl}/setup-password?token=${token}`
+
+    await sendNotificationEmail({
+      to: validatedData.email,
+      subject: 'Welcome to PhoneShop HRM - Setup Your Account',
+      html: `
+        <div style="font-family: sans-serif; max-w: 600px; margin: 0 auto;">
+          <h2>Welcome, ${validatedData.name}!</h2>
+          <p>An account has been created for you on the PhoneShop HRM system.</p>
+          <p>Please click the button below to set up your password and access your account.</p>
+          <div style="margin: 30px 0;">
+            <a href="${setupUrl}" style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Set Up Password</a>
+          </div>
+          <p style="color: #64748b; font-size: 14px;">This link will expire in 7 days.</p>
+        </div>
+      `
     })
 
     const { password, ...safeEmployee } = employee

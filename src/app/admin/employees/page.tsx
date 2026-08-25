@@ -29,7 +29,7 @@ type Employee = {
 export default function AdminEmployeesPage() {
   const queryClient = useQueryClient()
   const [isEditing, setIsEditing] = useState<string | null>(null)
-  const [formData, setFormData] = useState<Partial<Employee> & { password?: string }>({})
+  const [formData, setFormData] = useState<Partial<Employee>>({})
   const [showForm, setShowForm] = useState(false)
   const toast = useToast()
   const [confirmState, setConfirmState] = useState<{ isOpen: boolean, id: string, currentStatus: boolean }>({
@@ -57,7 +57,7 @@ export default function AdminEmployeesPage() {
   })
 
   const saveMutation = useMutation({
-    mutationFn: async (employee: Partial<Employee> & { password?: string }) => {
+    mutationFn: async (employee: Partial<Employee>) => {
       const url = employee.id ? `/api/employees/${employee.id}` : '/api/employees'
       const method = employee.id ? 'PUT' : 'POST'
       const res = await fetch(url, {
@@ -155,8 +155,8 @@ export default function AdminEmployeesPage() {
             <CardTitle>{isEditing ? 'Edit Employee' : 'Add New Employee'}</CardTitle>
             <CardDescription>
               {isEditing 
-                ? "Update employee details. Leave password blank to keep it unchanged." 
-                : "Create a new employee account. They will use the email and password to log in."}
+                ? "Update employee details." 
+                : "Create a new employee account. An email will be sent to them to securely set their password."}
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-6">
@@ -179,14 +179,7 @@ export default function AdminEmployeesPage() {
                   onChange={e => setFormData({...formData, email: e.target.value})}
                 />
                 
-                <Input 
-                  label={isEditing ? 'New Password (Optional)' : 'Password'}
-                  type="password"
-                  required={!isEditing}
-                  placeholder={isEditing ? 'Leave blank to keep unchanged' : 'Minimum 6 characters'}
-                  value={formData.password || ''} 
-                  onChange={e => setFormData({...formData, password: e.target.value})}
-                />
+
 
                 <Input 
                   label="Monthly Salary (LKR)"

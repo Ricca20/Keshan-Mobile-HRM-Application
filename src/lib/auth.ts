@@ -49,9 +49,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.role = (user as any).role
         token.shopId = (user as any).shopId
       }
+      
+      // On subsequent requests, verify user is still active
+      if (!user && token.sub) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.sub },
+          select: { isActive: true, role: true, shopId: true }
+        })
+        
+        if (!dbUser || !dbUser.isActive) {
+          token.error = 'Deactivated'
+        } else {
+          token.role = dbUser.role
+          token.shopId = dbUser.shopId
+        }
+      }
       return token
     },
     async session({ session, token }) {
+      if (token.error === 'Deactivated') {
+        return {} as any
+      }
+
       if (session.user) {
         ;(session.user as any).id = token.sub
         ;(session.user as any).role = token.role

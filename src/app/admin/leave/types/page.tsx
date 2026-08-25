@@ -66,6 +66,20 @@ export default function LeaveTypesPage() {
     }
   })
 
+  const rolloverMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/admin/leave/rollover', { method: 'POST' })
+      if (!res.ok) throw new Error('Failed to run rollover')
+      return res.json()
+    },
+    onSuccess: (data) => {
+      toast.success(`Successfully ran rollover. Created ${data.createdCount} new balances.`)
+    },
+    onError: (err: any) => {
+      toast.error(err.message)
+    }
+  })
+
   const openModal = (type?: LeaveType) => {
     if (type) {
       setEditingType(type)
@@ -94,9 +108,23 @@ export default function LeaveTypesPage() {
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Leave Types</h1>
           <p className="text-slate-500 text-sm mt-1">Manage leave policies and allowances.</p>
         </div>
-        <Button onClick={() => openModal()} className="shadow-lg shadow-blue-500/20 w-full sm:w-auto">
-          <Plus className="w-4 h-4 mr-2" /> Add Leave Type
-        </Button>
+        <div className="flex gap-2 w-full sm:w-auto flex-col sm:flex-row">
+          <Button 
+            variant="outline" 
+            onClick={() => {
+              if (confirm('Are you sure you want to run the Annual Rollover? This will generate missing leave balances for all active employees for the current year.')) {
+                rolloverMutation.mutate()
+              }
+            }} 
+            disabled={rolloverMutation.isPending}
+            className="w-full sm:w-auto border-blue-200 text-blue-700 hover:bg-blue-50"
+          >
+            {rolloverMutation.isPending ? 'Running...' : 'Run Annual Rollover'}
+          </Button>
+          <Button onClick={() => openModal()} className="shadow-lg shadow-blue-500/20 w-full sm:w-auto">
+            <Plus className="w-4 h-4 mr-2" /> Add Leave Type
+          </Button>
+        </div>
       </div>
 
       <Card className="border-slate-200 shadow-sm overflow-hidden">

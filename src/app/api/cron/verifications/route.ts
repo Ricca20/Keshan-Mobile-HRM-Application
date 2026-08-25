@@ -76,15 +76,6 @@ export async function GET(req: Request) {
           }
         })
 
-        // Send Email
-        await sendNotificationEmail({
-          to: user.email,
-          subject: 'URGENT: Active Work Verification',
-          html: `<p>Hello <strong>${user.name}</strong>,</p>
-                 <p>This is a random active work verification check.</p>
-                 <p>Please click the button below within <strong>2 minutes</strong> to confirm you are actively working.</p>
-                 <a href="${baseUrl}/verify/${verification.id}" style="display:inline-block;padding:10px 20px;background-color:#3b82f6;color:white;text-decoration:none;border-radius:5px;font-weight:bold;">Verify Now</a>`
-        })
       }
     }
 

@@ -25,7 +25,6 @@ import Image from 'next/image'
 const navItems = [
   { label: 'Dashboard', href: '/employee/dashboard', icon: LayoutDashboard },
   { label: 'Clock', href: '/employee/clock', icon: Clock },
-  { label: 'Schedule', href: '/employee/schedule', icon: Calendar },
   { label: 'Leave', href: '/employee/leave', icon: TreePalm },
   { label: 'Paysheets', href: '/employee/paysheet', icon: Receipt },
 ]
