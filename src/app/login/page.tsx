@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useToast } from '@/components/ui/toast'
 import {
   ShieldCheck,
   ArrowLeft,
@@ -15,15 +16,19 @@ import {
   Receipt,
   CheckCircle2,
   Fingerprint,
+  Eye,
+  EyeOff,
 } from 'lucide-react'
 import Image from 'next/image'
 
 export default function LoginPage() {
   const router = useRouter()
+  const toast = useToast()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -39,12 +44,15 @@ export default function LoginPage() {
 
       if (res?.error) {
         setError('Invalid email or password. Please try again.')
+        toast.error('Password wrong')
       } else {
+        toast.success('Login success')
         router.push('/')
         router.refresh()
       }
     } catch {
       setError('Something went wrong. Please try again.')
+      toast.error('Login failed')
     } finally {
       setIsLoading(false)
     }
@@ -181,12 +189,21 @@ export default function LoginPage() {
                 <Input
                   id="password"
                   label="Password"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   autoComplete="current-password"
+                  rightElement={
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="text-slate-400 hover:text-slate-600 focus:outline-none transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  }
                 />
                 <div className="flex justify-end mt-1.5">
                   <Link
