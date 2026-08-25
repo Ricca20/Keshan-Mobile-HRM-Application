@@ -7,7 +7,13 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 const connectionString = process.env.DATABASE_URL
-const pool = new Pool({ connectionString })
+// Limit max connections to 3 to prevent EMAXCONNSESSION (15 limit) on Supabase pooler
+// when Vercel serverless functions spin up and run Promise.all
+const pool = new Pool({ 
+  connectionString,
+  max: 3,
+  idleTimeoutMillis: 3000,
+})
 const adapter = new PrismaPg(pool)
 
 export const prisma =
