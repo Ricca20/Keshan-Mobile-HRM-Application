@@ -20,48 +20,75 @@ export default async function AdminDashboard() {
   const currentMonth = today.getMonth() + 1
   const currentYear = today.getFullYear()
 
-  // 1. Total Employees
-  const totalEmployees = await prisma.user.count({
-    where: { role: 'EMPLOYEE', isActive: true }
-  })
+  // Run all database queries concurrently to avoid waterfall delays
+  const [
+    totalEmployees,
+    clockInsToday,
+    pendingLeaves,
+    flaggedEntries,
+    draftPaysheets,
+    onLeaveToday,
+    recentLeaves,
+    recentLogs
+  ] = await Promise.all([
+    // 1. Total Employees
+    prisma.user.count({
+      where: { role: 'EMPLOYEE', isActive: true }
+    }),
+    
+    // 2. Clocked In Today (Unique users who have an 'IN' log today)
+    prisma.clockLog.findMany({
+      where: {
+        type: 'IN',
+        timestamp: { gte: startOfDay, lte: endOfDay }
+      },
+      distinct: ['userId']
+    }),
+    
+    // 3. Pending Leave
+    prisma.leaveRequest.count({
+      where: { status: 'PENDING' }
+    }),
+    
+    // 4. Flagged Entries (Clock logs that were flagged today)
+    prisma.clockLog.count({
+      where: {
+        isValid: false,
+        timestamp: { gte: startOfDay, lte: endOfDay }
+      }
+    }),
+    
+    // 5. Unfinalized Paysheets (Drafts for current month)
+    prisma.paySheet.count({
+      where: { status: 'DRAFT', month: currentMonth, year: currentYear }
+    }),
+    
+    // 6. Absent Today
+    prisma.leaveRequest.findMany({
+      where: {
+        status: 'APPROVED',
+        startDate: { lte: endOfDay },
+        endDate: { gte: startOfDay }
+      },
+      distinct: ['userId']
+    }),
 
-  // 2. Clocked In Today (Unique users who have an 'IN' log today)
-  const clockInsToday = await prisma.clockLog.findMany({
-    where: {
-      type: 'IN',
-      timestamp: { gte: startOfDay, lte: endOfDay }
-    },
-    distinct: ['userId']
-  })
+    // 7. Recent 5 leave requests for the widget
+    prisma.leaveRequest.findMany({
+      take: 5,
+      orderBy: { createdAt: 'desc' },
+      include: { user: { select: { name: true } }, leaveType: { select: { name: true } } }
+    }),
+
+    // 8. Recent 5 clock logs
+    prisma.clockLog.findMany({
+      take: 5,
+      orderBy: { timestamp: 'desc' },
+      include: { user: { select: { name: true } } }
+    })
+  ])
+
   const clockedInCount = clockInsToday.length
-
-  // 3. Pending Leave
-  const pendingLeaves = await prisma.leaveRequest.count({
-    where: { status: 'PENDING' }
-  })
-
-  // 4. Flagged Entries (Clock logs that were flagged today)
-  const flaggedEntries = await prisma.clockLog.count({
-    where: {
-      isValid: false,
-      timestamp: { gte: startOfDay, lte: endOfDay }
-    }
-  })
-
-  // 5. Unfinalized Paysheets (Drafts for current month)
-  const draftPaysheets = await prisma.paySheet.count({
-    where: { status: 'DRAFT', month: currentMonth, year: currentYear }
-  })
-
-  // 6. Absent Today (Total - Clocked In - Approved Leave today)
-  const onLeaveToday = await prisma.leaveRequest.findMany({
-    where: {
-      status: 'APPROVED',
-      startDate: { lte: endOfDay },
-      endDate: { gte: startOfDay }
-    },
-    distinct: ['userId']
-  })
   const absentCount = Math.max(0, totalEmployees - clockedInCount - onLeaveToday.length)
 
   const statCards = [
@@ -120,20 +147,6 @@ export default async function AdminDashboard() {
       href: '/admin/attendance'
     },
   ]
-
-  // Get recent 5 leave requests for the widget
-  const recentLeaves = await prisma.leaveRequest.findMany({
-    take: 5,
-    orderBy: { createdAt: 'desc' },
-    include: { user: { select: { name: true } }, leaveType: { select: { name: true } } }
-  })
-
-  // Get recent 5 clock logs
-  const recentLogs = await prisma.clockLog.findMany({
-    take: 5,
-    orderBy: { timestamp: 'desc' },
-    include: { user: { select: { name: true } } }
-  })
 
   return (
     <div className="animate-fade-in space-y-8">
