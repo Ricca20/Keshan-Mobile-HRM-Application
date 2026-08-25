@@ -149,18 +149,18 @@ export default function AdminShopsPage() {
 
                 <div className="space-y-1.5">
                   <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                    <Wifi className="w-4 h-4 text-blue-500" /> Allowed IP Address
+                    <Wifi className="w-4 h-4 text-blue-500" /> Allowed IP Address(es)
                   </label>
                   <div className="relative">
                     <input
                       required
                       className="block w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none hover:border-slate-400 transition-all"
-                      placeholder="203.0.113.1" 
+                      placeholder="e.g. 203.0.113.1, 192.168.1.5" 
                       value={formData.allowedIp || ''} 
                       onChange={e => setFormData({...formData, allowedIp: e.target.value})}
                     />
                   </div>
-                  <p className="text-xs text-slate-500">Employees must be connected to this IP to clock in.</p>
+                  <p className="text-xs text-slate-500">Employees must be connected to one of these IPs. Use commas for multiple IPs.</p>
                 </div>
               </div>
               

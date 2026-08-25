@@ -96,7 +96,7 @@ export default function EmployeeClockPage() {
                 </h2>
                 {status?.lastLog && (
                   <p className="text-sm text-slate-500">
-                    Last {status.lastLog.type === 'IN' ? 'clock in' : 'clock out'} was at {new Date(status.lastLog.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                    Last {status.lastLog.type === 'IN' ? 'clock in' : 'clock out'} was at {new Date(status.lastLog.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Colombo' })}
                   </p>
                 )}
               </div>

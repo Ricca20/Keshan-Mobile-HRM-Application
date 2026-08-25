@@ -19,6 +19,7 @@ import {
   ChevronRight,
   Fingerprint,
   ShieldAlert,
+  Settings,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -34,6 +35,7 @@ const navItems = [
   { label: 'Leave', href: '/admin/leave', icon: TreePalm },
   { label: 'Paysheets', href: '/admin/paysheets', icon: Receipt },
   { label: 'Reports', href: '/admin/reports', icon: BarChart3 },
+  { label: 'Settings', href: '/admin/settings', icon: Settings },
 ]
 
 export default function AdminLayout({

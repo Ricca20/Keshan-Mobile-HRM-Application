@@ -8,9 +8,19 @@ import { prisma } from './prisma'
  * @returns Total number of days
  */
 export function calculateLeaveDays(startDate: Date, endDate: Date): number {
-  const diffTime = Math.abs(endDate.getTime() - startDate.getTime())
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-  return diffDays + 1 // Inclusive of both start and end dates
+  let count = 0
+  const curDate = new Date(startDate.getTime())
+  
+  while (curDate <= endDate) {
+    const dayOfWeek = curDate.getDay()
+    // Skip Sundays (0) and Saturdays (6)
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      count++
+    }
+    curDate.setDate(curDate.getDate() + 1)
+  }
+  
+  return count
 }
 
 /**
