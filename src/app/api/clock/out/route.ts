@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
 
   // Ensure they are currently clocked in
   const lastLog = await prisma.clockLog.findFirst({
-    where: { userId },
+    where: { userId, isValid: true },
     orderBy: { timestamp: 'desc' },
   })
   

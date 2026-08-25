@@ -12,7 +12,7 @@ export default async function EmployeeDashboard() {
 
   // 1. Current Clock Status
   const lastLog = await prisma.clockLog.findFirst({
-    where: { userId },
+    where: { userId, isValid: true },
     orderBy: { timestamp: 'desc' },
     include: { shop: true }
   })

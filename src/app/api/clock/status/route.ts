@@ -12,11 +12,11 @@ export async function GET(req: Request) {
 
   try {
     const lastLog = await prisma.clockLog.findFirst({
-      where: { userId },
+      where: { userId, isValid: true },
       orderBy: { timestamp: 'desc' },
     })
 
-    const isClockedIn = lastLog?.type === 'IN' && lastLog.isValid
+    const isClockedIn = lastLog?.type === 'IN'
 
     return NextResponse.json({
       isClockedIn,
