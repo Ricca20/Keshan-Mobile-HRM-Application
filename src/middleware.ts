@@ -7,7 +7,7 @@ const rateLimitMap = new Map<string, { count: number, resetTime: number }>()
 const RATE_LIMIT_WINDOW = 60 * 1000 // 1 minute
 const MAX_REQUESTS = 10 // Max login attempts per minute
 
-export async function proxy(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   // 1. Rate Limiting for Login & Forgot Password
   if ((req.nextUrl.pathname === '/login' || req.nextUrl.pathname === '/api/auth/forgot-password') && req.method === 'POST') {
     const ip = req.headers.get('x-forwarded-for') || '127.0.0.1'
