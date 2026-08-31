@@ -12,11 +12,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install PostgreSQL client
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client
-
       - name: Generate Database Backup
         id: dump
         env:
@@ -27,11 +22,23 @@ jobs:
             exit 1
           fi
           
+          # Fix Supabase connection pooler port for pg_dump
+          # pg_dump requires session mode (port 6543) instead of transaction mode (port 5432)
+          PG_DUMP_URL="$DATABASE_URL"
+          if [[ "$PG_DUMP_URL" == *"pooler.supabase.com:5432"* ]]; then
+            echo "Detected Supabase pooler URL, switching to session mode port 6543 for pg_dump"
+            PG_DUMP_URL="${PG_DUMP_URL/pooler.supabase.com:5432/pooler.supabase.com:6543}"
+          fi
+          
+          # Remove pgbouncer query param if present
+          PG_DUMP_URL="${PG_DUMP_URL/\?pgbouncer=true/}"
+          
           TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
           FILENAME="phoneshop_hrm_backup_$TIMESTAMP.sql"
           
           echo "Dumping database to $FILENAME..."
-          pg_dump "$DATABASE_URL" --no-owner --no-privileges -f $FILENAME
+          # Using docker ensures we have a compatible pg_dump version and don't need to apt-get install
+          docker run --rm postgres:15-alpine pg_dump "$PG_DUMP_URL" --no-owner --no-privileges > "$FILENAME"
           
           echo "filename=$FILENAME" >> $GITHUB_OUTPUT
 

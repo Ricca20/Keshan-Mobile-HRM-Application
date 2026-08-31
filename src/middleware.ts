@@ -12,7 +12,7 @@ export async function middleware(req: NextRequest) {
   if ((req.nextUrl.pathname === '/login' || req.nextUrl.pathname === '/api/auth/forgot-password') && req.method === 'POST') {
     const ip = req.headers.get('x-forwarded-for') || '127.0.0.1'
     const now = Date.now()
-    
+
     const limitRecord = rateLimitMap.get(ip)
     if (limitRecord) {
       if (now > limitRecord.resetTime) {
@@ -30,8 +30,8 @@ export async function middleware(req: NextRequest) {
 
   const { nextUrl } = req
   const isProduction = process.env.NODE_ENV === 'production'
-  const token = await getToken({ 
-    req, 
+  const token = await getToken({
+    req,
     secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || '',
     secureCookie: isProduction,
     salt: isProduction ? '__Secure-authjs.session-token' : 'authjs.session-token'
@@ -67,11 +67,11 @@ export async function middleware(req: NextRequest) {
     if (isAuthRoute || nextUrl.pathname === '/') {
       return NextResponse.redirect(new URL(token.role === 'ADMIN' ? '/admin/dashboard' : '/employee/dashboard', nextUrl))
     }
-    
+
     if (isAdminRoute && token.role !== 'ADMIN') {
       return NextResponse.redirect(new URL('/employee/dashboard', nextUrl))
     }
-    
+
     if (isEmployeeRoute && token.role !== 'EMPLOYEE') {
       return NextResponse.redirect(new URL('/admin/dashboard', nextUrl))
     }
