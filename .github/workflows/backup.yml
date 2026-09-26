@@ -8,6 +8,8 @@ on:
 jobs:
   backup:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
       - name: Install PostgreSQL client
         run: |
@@ -15,8 +17,6 @@ jobs:
           sudo apt-get install -y -qq postgresql-client
 
       - name: Ping Database (Keep-Alive)
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           if [ -z "$DATABASE_URL" ]; then
             echo "::error::DATABASE_URL secret is not set! Go to Settings > Secrets > Actions to add it."

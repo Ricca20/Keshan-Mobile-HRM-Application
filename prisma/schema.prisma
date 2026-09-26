@@ -11,30 +11,30 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
+  id            String   @id @default(cuid())
   name          String
-  email         String    @unique
+  email         String   @unique
   password      String
-  role          Role      @default(EMPLOYEE)
-  isActive      Boolean   @default(true)
-  joinDate      DateTime  @default(now())
-  salary        Float     @default(0)
+  role          Role     @default(EMPLOYEE)
+  isActive      Boolean  @default(true)
+  joinDate      DateTime @default(now())
+  salary        Float    @default(0)
   phone         String?
   address       String?
-  penaltyPoints Int       @default(0)
+  penaltyPoints Int      @default(0)
 
-  shopId        String?
-  shop          Shop?     @relation(fields: [shopId], references: [id])
-  clockLogs     ClockLog[]
-  leaveRequests LeaveRequest[]
-  leaveBalances LeaveBalance[]
-  paySheets     PaySheet[]
-  notifications Notification[]
-  verifications WorkVerification[]
+  shopId           String?
+  shop             Shop?              @relation(fields: [shopId], references: [id])
+  clockLogs        ClockLog[]
+  leaveRequests    LeaveRequest[]
+  leaveBalances    LeaveBalance[]
+  paySheets        PaySheet[]
+  notifications    Notification[]
+  verifications    WorkVerification[]
   dailyAttendances DailyAttendance[]
 
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum Role {
@@ -43,33 +43,33 @@ enum Role {
 }
 
 model Shop {
-  id           String   @id @default(cuid())
-  name         String
-  address      String
-  allowedIp    String
+  id        String @id @default(cuid())
+  name      String
+  address   String
+  allowedIp String
 
-  users        User[]
-  clockLogs    ClockLog[]
+  users     User[]
+  clockLogs ClockLog[]
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model ClockLog {
-  id           String      @id @default(cuid())
+  id           String    @id @default(cuid())
   userId       String
-  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   shopId       String
-  shop         Shop        @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shop         Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
   type         ClockType
-  timestamp    DateTime    @default(now())
+  timestamp    DateTime  @default(now())
   ipAddress    String
-  isValid      Boolean     @default(false)
-  flagReason   String?     // "GPS_FAIL" | "IP_FAIL" | "BOTH_FAIL" | null
-  overriddenBy String?     // admin userId who manually overrode
+  isValid      Boolean   @default(false)
+  flagReason   String? // "GPS_FAIL" | "IP_FAIL" | "BOTH_FAIL" | null
+  overriddenBy String? // admin userId who manually overrode
   overrideNote String?
 
-  createdAt    DateTime    @default(now())
+  createdAt DateTime @default(now())
 
   @@index([userId])
   @@index([shopId])
@@ -82,50 +82,50 @@ enum ClockType {
 }
 
 model LeaveType {
-  id            String         @id @default(cuid())
-  name          String         @unique // "Annual", "Sick", "Casual", "No-Pay"
-  daysAllowed   Int            @default(14)
-  isPaid        Boolean        @default(true)
-  isActive      Boolean        @default(true)
+  id          String  @id @default(cuid())
+  name        String  @unique // "Annual", "Sick", "Casual", "No-Pay"
+  daysAllowed Int     @default(14)
+  isPaid      Boolean @default(true)
+  isActive    Boolean @default(true)
 
   leaveRequests LeaveRequest[]
   leaveBalances LeaveBalance[]
 
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model LeaveBalance {
-  id           String    @id @default(cuid())
-  userId       String
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  leaveTypeId  String
-  leaveType    LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
-  year         Int
-  totalDays    Int
-  usedDays     Int       @default(0)
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leaveTypeId String
+  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+  year        Int
+  totalDays   Int
+  usedDays    Int       @default(0)
 
   @@unique([userId, leaveTypeId, year])
   @@index([userId])
 }
 
 model LeaveRequest {
-  id           String        @id @default(cuid())
+  id           String      @id @default(cuid())
   userId       String
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   leaveTypeId  String
-  leaveType    LeaveType     @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
-  startDate    DateTime      @db.Date
-  endDate      DateTime      @db.Date
+  leaveType    LeaveType   @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+  startDate    DateTime    @db.Date
+  endDate      DateTime    @db.Date
   totalDays    Int
   reason       String
-  status       LeaveStatus   @default(PENDING)
+  status       LeaveStatus @default(PENDING)
   approvedBy   String?
   approverNote String?
   reviewedAt   DateTime?
 
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId])
   @@index([status])
@@ -138,31 +138,37 @@ enum LeaveStatus {
 }
 
 model PaySheet {
-  id            String         @id @default(cuid())
-  userId        String
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  month         Int            // 1–12
-  year          Int
-  baseSalary    Float
-  paidDays      Int
-  unpaidDays    Int
-  deductions    Float          @default(0)
-  bonuses       Float          @default(0)
-  deductionNote String?
-  bonusNote     String?
-  otHoursTotal  Float          @default(0)
-  otPay         Float          @default(0)
-  lateMinutesTotal Int         @default(0)
-  lateDeduction Float          @default(0)
-  halfDaysTotal Int            @default(0)
-  halfDayDeduction Float       @default(0)
-  netPay        Float
-  status        PaySheetStatus @default(DRAFT)
-  finalizedAt   DateTime?
-  finalizedBy   String?
+  id               String         @id @default(cuid())
+  userId           String
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month            Int // 1–12
+  year             Int
+  baseSalary       Float
+  paidDays         Int
+  unpaidDays       Int
+  deductions       Float          @default(0)
+  bonuses          Float          @default(0)
+  deductionNote    String?
+  bonusNote        String?
+  otHoursTotal     Float          @default(0)
+  otPay            Float          @default(0)
+  lateMinutesTotal Int            @default(0)
+  lateDeduction    Float          @default(0)
+  halfDaysTotal    Int            @default(0)
+  halfDayDeduction Float          @default(0)
+  netPay           Float
+  status           PaySheetStatus @default(DRAFT)
+  finalizedAt      DateTime?
+  finalizedBy      String?
 
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  // Two-way verification
+  paymentReference String?
+  paidAt           DateTime?
+  acknowledgedAt   DateTime?
+  disputeReason    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([userId, month, year])
   @@index([userId])
@@ -171,16 +177,19 @@ model PaySheet {
 enum PaySheetStatus {
   DRAFT
   FINALIZED
+  PAYMENT_CLAIMED
+  ACKNOWLEDGED
+  DISPUTED
 }
 
 model Notification {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title     String
-  message   String
-  type      String   // "LEAVE_REQUEST", "LEAVE_APPROVED", "LEAVE_REJECTED", "PAYROLL"
-  isRead    Boolean  @default(false)
+  id      String  @id @default(cuid())
+  userId  String
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title   String
+  message String
+  type    String // "LEAVE_REQUEST", "LEAVE_APPROVED", "LEAVE_REJECTED", "PAYROLL"
+  isRead  Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -190,14 +199,14 @@ model Notification {
 }
 
 model WorkVerification {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  status      VerificationStatus @default(PENDING)
-  sentAt      DateTime @default(now())
-  expiresAt   DateTime
-  verifiedAt  DateTime?
-  
+  id         String             @id @default(cuid())
+  userId     String
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status     VerificationStatus @default(PENDING)
+  sentAt     DateTime           @default(now())
+  expiresAt  DateTime
+  verifiedAt DateTime?
+
   @@index([userId])
   @@index([status])
 }
@@ -227,26 +236,26 @@ model SystemSetting {
 }
 
 model DailyAttendance {
-  id           String             @id @default(cuid())
-  userId       String
-  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  date         DateTime           @db.Date
-  clockIn      DateTime?
-  clockOut     DateTime?
-  status       AttendanceStatus   @default(PRESENT)
-  
-  isLate       Boolean            @default(false)
-  lateMinutes  Int                @default(0)
-  
-  isHalfDay    Boolean            @default(false)
-  
-  otHours      Float              @default(0)
-  
-  overrideNote String?
-  updatedBy    String?            // Admin who modified the record
+  id       String           @id @default(cuid())
+  userId   String
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date     DateTime         @db.Date
+  clockIn  DateTime?
+  clockOut DateTime?
+  status   AttendanceStatus @default(PRESENT)
 
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  isLate      Boolean @default(false)
+  lateMinutes Int     @default(0)
+
+  isHalfDay Boolean @default(false)
+
+  otHours Float @default(0)
+
+  overrideNote String?
+  updatedBy    String? // Admin who modified the record
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([userId, date])
   @@index([userId])

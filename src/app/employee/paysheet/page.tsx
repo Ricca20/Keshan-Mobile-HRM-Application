@@ -1,10 +1,13 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
-import { FileText, CalendarDays, Wallet, TrendingDown, TrendingUp, Download } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { FileText, CalendarDays, Wallet, TrendingDown, TrendingUp, Download, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { useState } from 'react'
 import { formatCurrency } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { useToast } from '@/components/ui/toast'
+import { ConfirmModal, PromptModal } from '@/components/ui/modal'
 
 type PaySheet = {
   id: string
@@ -18,12 +21,56 @@ type PaySheet = {
   netPay: number
   bonusNote: string | null
   deductionNote: string | null
-  status: 'DRAFT' | 'FINALIZED'
+  status: 'DRAFT' | 'FINALIZED' | 'PAYMENT_CLAIMED' | 'ACKNOWLEDGED' | 'DISPUTED'
   finalizedAt: string
+  paidAt?: string
+  acknowledgedAt?: string
+  paymentReference?: string
+  disputeReason?: string
 }
 
 export default function EmployeePaysheetsPage() {
   const [selectedPaysheet, setSelectedPaysheet] = useState<PaySheet | null>(null)
+  const queryClient = useQueryClient()
+  const toast = useToast()
+  
+  const [isAcknowledgeOpen, setIsAcknowledgeOpen] = useState(false)
+  const [isDisputeOpen, setIsDisputeOpen] = useState(false)
+  const [disputeReason, setDisputeReason] = useState('')
+
+  const acknowledgeMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/paysheets/acknowledge/${id}`, { method: 'POST' })
+      if (!res.ok) throw new Error('Failed to acknowledge')
+      return res.json()
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['myPaysheets'] })
+      setSelectedPaysheet(data)
+      setIsAcknowledgeOpen(false)
+      toast.success('Payment acknowledged successfully')
+    },
+    onError: () => toast.error('Error acknowledging payment')
+  })
+
+  const disputeMutation = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const res = await fetch(`/api/paysheets/dispute/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason })
+      })
+      if (!res.ok) throw new Error('Failed to dispute')
+      return res.json()
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['myPaysheets'] })
+      setSelectedPaysheet(data)
+      setIsDisputeOpen(false)
+      toast.success('Payment disputed')
+    },
+    onError: () => toast.error('Error disputing payment')
+  })
 
   const { data: paysheets = [], isLoading } = useQuery<PaySheet[]>({
     queryKey: ['myPaysheets'],
@@ -162,6 +209,54 @@ export default function EmployeePaysheetsPage() {
                     <span className="font-black text-3xl text-blue-600">{formatCurrency(selectedPaysheet.netPay)}</span>
                   </div>
                 </div>
+
+                {selectedPaysheet.status === 'PAYMENT_CLAIMED' && (
+                  <div className="mt-8 bg-orange-50 border border-orange-200 p-5 rounded-2xl shadow-sm relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+                      <AlertTriangle className="w-24 h-24 text-orange-900" />
+                    </div>
+                    <div className="relative z-10">
+                      <h4 className="font-bold text-orange-900 flex items-center gap-2 mb-2 text-lg">
+                        <AlertTriangle className="w-5 h-5 text-orange-600" /> Payment Issued
+                      </h4>
+                      <p className="text-sm text-orange-800 mb-5 leading-relaxed">
+                        The admin marked this paysheet as paid on <strong>{new Date(selectedPaysheet.paidAt!).toLocaleDateString()}</strong>. 
+                        {selectedPaysheet.paymentReference && ` Reference: ${selectedPaysheet.paymentReference}`}
+                      </p>
+                      <div className="flex sm:flex-row flex-col gap-3">
+                        <Button 
+                          onClick={() => setIsAcknowledgeOpen(true)}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex-1"
+                        >
+                          <CheckCircle2 className="w-4 h-4 mr-2" /> I Received This Payment
+                        </Button>
+                        <Button 
+                          onClick={() => setIsDisputeOpen(true)}
+                          variant="outline"
+                          className="border-red-200 text-red-600 hover:bg-red-50 flex-1"
+                        >
+                          I Did Not Receive It
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedPaysheet.status === 'ACKNOWLEDGED' && (
+                  <div className="mt-8 bg-emerald-50 border border-emerald-200 p-5 rounded-2xl text-center">
+                    <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+                    <p className="font-bold text-emerald-900">Payment Verified</p>
+                    <p className="text-sm text-emerald-700 mt-1">You acknowledged receiving this payment on {new Date(selectedPaysheet.acknowledgedAt!).toLocaleDateString()}.</p>
+                  </div>
+                )}
+
+                {selectedPaysheet.status === 'DISPUTED' && (
+                  <div className="mt-8 bg-red-50 border border-red-200 p-5 rounded-2xl text-center">
+                    <AlertTriangle className="w-8 h-8 text-red-500 mx-auto mb-2" />
+                    <p className="font-bold text-red-900">Payment Disputed</p>
+                    <p className="text-sm text-red-700 mt-1">Admin will contact you to resolve this issue.</p>
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -173,6 +268,35 @@ export default function EmployeePaysheetsPage() {
           )}
         </div>
       </div>
+      
+      {selectedPaysheet && (
+        <>
+          <ConfirmModal
+            isOpen={isAcknowledgeOpen}
+            onClose={() => setIsAcknowledgeOpen(false)}
+            onConfirm={() => acknowledgeMutation.mutate(selectedPaysheet.id)}
+            title="Acknowledge Payment"
+            description="By clicking confirm, you legally acknowledge that you have received this payment in full. This action cannot be undone."
+            confirmText="Acknowledge Receipt"
+            variant="primary"
+            isLoading={acknowledgeMutation.isPending}
+          />
+
+          <PromptModal
+            isOpen={isDisputeOpen}
+            onClose={() => setIsDisputeOpen(false)}
+            onSubmit={(value) => {
+              setDisputeReason(value)
+              disputeMutation.mutate({ id: selectedPaysheet.id, reason: value })
+            }}
+            title="Dispute Payment"
+            description="If you have not received this payment, provide a reason and we will flag this for the admin."
+            placeholder="e.g. Only received Rs. 5000"
+            submitText="Submit Dispute"
+            isLoading={disputeMutation.isPending}
+          />
+        </>
+      )}
     </div>
   )
 }

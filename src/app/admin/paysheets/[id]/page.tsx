@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useState, useEffect } from 'react'
 import { useToast } from '@/components/ui/toast'
-import { ConfirmModal } from '@/components/ui/modal'
+import { ConfirmModal, PromptModal } from '@/components/ui/modal'
 import { formatCurrency } from '@/lib/utils'
 
 export default function PaysheetDetailPage() {
@@ -22,6 +22,8 @@ export default function PaysheetDetailPage() {
   const [deductionNote, setDeductionNote] = useState('')
   const toast = useToast()
   const [isFinalizeModalOpen, setIsFinalizeModalOpen] = useState(false)
+  const [isPaidModalOpen, setIsPaidModalOpen] = useState(false)
+  const [paymentReference, setPaymentReference] = useState('')
 
   const { data: ps, isLoading } = useQuery<any>({
     queryKey: ['paysheet', id],
@@ -81,6 +83,28 @@ export default function PaysheetDetailPage() {
     onError: (err: any) => toast.error(err.message)
   })
 
+  const markPaidMutation = useMutation({
+    mutationFn: async (ref: string) => {
+      const res = await fetch(`/api/paysheets/pay/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentReference: ref })
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Failed to mark as paid')
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['paysheet', id] })
+      queryClient.invalidateQueries({ queryKey: ['paysheets'] })
+      setIsPaidModalOpen(false)
+      toast.success('Marked as paid! Awaiting employee acknowledgement.')
+    },
+    onError: (err: any) => toast.error(err.message)
+  })
+
   if (isLoading) {
     return (
       <div className="flex justify-center p-12">
@@ -92,6 +116,7 @@ export default function PaysheetDetailPage() {
   if (!ps) return <div className="p-8 text-center text-slate-500">Paysheet not found</div>
 
   const isDraft = ps.status === 'DRAFT'
+  const isFinalized = ps.status === 'FINALIZED'
   // Preview net pay calculation
   const netPayPreview = ps.baseSalary - deductions + bonuses
 
@@ -252,6 +277,68 @@ export default function PaysheetDetailPage() {
               </Button>
             </div>
           )}
+
+          {isFinalized && (
+            <div className="bg-white p-5 rounded-2xl border border-blue-200 shadow-sm">
+              <div className="flex items-center gap-2 font-bold text-blue-900 mb-2">
+                <CheckCircle2 className="w-5 h-5 text-blue-600" />
+                Awaiting Payment
+              </div>
+              <p className="text-sm text-slate-600 mb-5 leading-relaxed">
+                This paysheet is finalized. Once you transfer the money, mark it as paid to request acknowledgement from the employee.
+              </p>
+              <Button 
+                className="w-full bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-600/20 text-white font-bold h-12" 
+                onClick={() => setIsPaidModalOpen(true)}
+              >
+                Mark as Paid
+              </Button>
+            </div>
+          )}
+
+          {ps.status === 'PAYMENT_CLAIMED' && (
+            <div className="bg-orange-50 p-5 rounded-2xl border border-orange-200 shadow-sm">
+              <div className="flex items-center gap-2 font-bold text-orange-900 mb-2">
+                <Clock className="w-5 h-5 text-orange-600" />
+                Awaiting Acknowledgement
+              </div>
+              <p className="text-sm text-orange-700 mb-2">
+                You marked this as paid on <strong>{new Date(ps.paidAt).toLocaleDateString()}</strong>.
+              </p>
+              {ps.paymentReference && (
+                <p className="text-sm font-mono bg-white px-2 py-1 rounded border border-orange-200 text-orange-800">
+                  Ref: {ps.paymentReference}
+                </p>
+              )}
+            </div>
+          )}
+
+          {ps.status === 'ACKNOWLEDGED' && (
+            <div className="bg-emerald-50 p-5 rounded-2xl border border-emerald-200 shadow-sm">
+              <div className="flex items-center gap-2 font-bold text-emerald-900 mb-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                Payment Verified
+              </div>
+              <p className="text-sm text-emerald-700">
+                The employee verified receiving this payment on <strong>{new Date(ps.acknowledgedAt).toLocaleString()}</strong>.
+              </p>
+            </div>
+          )}
+
+          {ps.status === 'DISPUTED' && (
+            <div className="bg-red-50 p-5 rounded-2xl border border-red-200 shadow-sm">
+              <div className="flex items-center gap-2 font-bold text-red-900 mb-2">
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+                Payment Disputed
+              </div>
+              <p className="text-sm text-red-700 mb-2">
+                The employee disputed this payment.
+              </p>
+              <div className="bg-white p-3 rounded-lg border border-red-200 text-sm text-slate-700">
+                <strong>Reason:</strong> {ps.disputeReason}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -264,6 +351,20 @@ export default function PaysheetDetailPage() {
         confirmText="Finalize"
         variant="primary"
         isLoading={finalizeMutation.isPending}
+      />
+
+      <PromptModal 
+        isOpen={isPaidModalOpen}
+        onClose={() => setIsPaidModalOpen(false)}
+        onSubmit={(value) => {
+          setPaymentReference(value)
+          markPaidMutation.mutate(value)
+        }}
+        title="Mark as Paid"
+        description="Enter a payment reference (e.g. Bank Transfer ID, 'Cash') to prove payment was sent."
+        placeholder="e.g. TRF-102934 or 'Cash Handed'"
+        submitText="Confirm Payment"
+        isLoading={markPaidMutation.isPending}
       />
     </div>
   )
