@@ -4,16 +4,17 @@ import { auth } from '@/lib/auth'
 
 export async function POST(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const paysheet = await prisma.paySheet.findUnique({
-      where: { id: params.id },
+      where: { id },
       select: { userId: true, status: true }
     })
 
@@ -33,7 +34,7 @@ export async function POST(
     }
 
     const updated = await prisma.paySheet.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         status: 'DISPUTED',
         disputeReason: reason,

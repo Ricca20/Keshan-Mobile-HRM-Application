@@ -4,9 +4,10 @@ import { auth } from '@/lib/auth'
 
 export async function POST(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const session = await auth()
     if (session?.user?.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -16,7 +17,7 @@ export async function POST(
     const { paymentReference } = body
 
     const paysheet = await prisma.paySheet.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         status: 'PAYMENT_CLAIMED',
         paymentReference,
