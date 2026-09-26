@@ -1,5 +1,6 @@
 import { prisma } from './prisma'
-import { getDaysInMonth } from 'date-fns'
+import { getDaysInMonth, eachDayOfInterval } from 'date-fns'
+import { processDailyAttendance, getSetting } from './attendance'
 
 /**
  * Calculates the number of valid clocked days for a user in a given month.
@@ -44,52 +45,94 @@ export async function generatePaySheetData(userId: string, month: number, year: 
   // As per client preference, working days = total days in the month
   const workingDays = getDaysInMonth(startOfMonth)
 
-  // Get approved paid leave days in this month
-  const paidLeave = await prisma.leaveRequest.findMany({
-    where: {
-      userId,
-      status: 'APPROVED',
-      leaveType: { isPaid: true },
-      startDate: { gte: startOfMonth },
-      endDate: { lte: endOfMonth },
-    }
-  })
-  const paidLeaveDays = paidLeave.reduce((sum, req) => sum + req.totalDays, 0)
+  // Get HRMS Settings
+  const otRate = parseFloat(await getSetting('OT_RATE_PER_HOUR', '1000'))
+  const latePenaltyAmount = parseFloat(await getSetting('LATE_PENALTY_AMOUNT', '500'))
 
-  // Get approved unpaid leave days
-  const unpaidLeave = await prisma.leaveRequest.findMany({
-    where: {
-      userId,
-      status: 'APPROVED',
-      leaveType: { isPaid: false },
-      startDate: { gte: startOfMonth },
-      endDate: { lte: endOfMonth },
-    }
-  })
-  const unpaidLeaveDays = unpaidLeave.reduce((sum, req) => sum + req.totalDays, 0)
+  // Process all attendance days for this user in this month
+  const daysInMonth = eachDayOfInterval({ start: startOfMonth, end: endOfMonth })
+  const attendanceRecords = await Promise.all(
+    daysInMonth.map(date => processDailyAttendance(userId, date))
+  )
 
-  // Get valid clock-in days
-  const clockedDays = await countValidClockDays(userId, month, year)
-
-  // Days employee was absent (no clock in, no leave recorded)
-  // Prevent negative absent days if clockedDays + leaveDays > workingDays (unlikely, but safe)
-  let absentDays = workingDays - clockedDays - paidLeaveDays - unpaidLeaveDays
-  if (absentDays < 0) absentDays = 0
+  let paidDays = 0
+  let unpaidDays = 0
+  
+  let otHoursTotal = 0
+  let otPay = 0
+  
+  let lateMinutesTotal = 0
+  let lateDeduction = 0
+  
+  let halfDaysTotal = 0
+  let halfDayDeduction = 0
 
   const dailyRate = user.salary / workingDays
-  const deductionFromAbsence = absentDays * dailyRate
-  const deductionFromUnpaid = unpaidLeaveDays * dailyRate
+
+  for (const record of attendanceRecords) {
+     if (record.status === 'PRESENT') {
+        paidDays += 1
+     } else if (record.status === 'HALF_DAY') {
+        paidDays += 0.5
+        halfDaysTotal += 1
+        halfDayDeduction += (dailyRate * 0.5) // Deduct half a day
+     } else if (record.status === 'LEAVE') {
+        // Is it paid or unpaid? We have to check the LeaveRequest
+        const leave = await prisma.leaveRequest.findFirst({
+           where: {
+              userId,
+              status: 'APPROVED',
+              startDate: { lte: record.date },
+              endDate: { gte: record.date }
+           },
+           include: { leaveType: true }
+        })
+        if (leave?.leaveType.isPaid) {
+           paidDays += 1
+        } else {
+           unpaidDays += 1
+        }
+     } else if (record.status === 'ABSENT') {
+        unpaidDays += 1
+     }
+
+     if (record.isLate) {
+        lateMinutesTotal += record.lateMinutes
+        lateDeduction += latePenaltyAmount // Fixed deduction per late day
+     }
+
+     if (record.otHours > 0) {
+        otHoursTotal += record.otHours
+        otPay += (record.otHours * otRate)
+     }
+  }
+
+  // Deduct for absences
+  const deductionFromUnpaid = unpaidDays * dailyRate
 
   // Penalty Calculation: Deduct a base amount per 10 points (can be overridden by admin later)
   const penaltySets = Math.floor(user.penaltyPoints / 10)
   const penaltyDeduction = penaltySets * 1000 // 1000 deduction per 10 points
 
-  const totalDeductions = deductionFromAbsence + deductionFromUnpaid + penaltyDeduction
-  const netPay = user.salary - totalDeductions
+  const totalDeductions = deductionFromUnpaid + lateDeduction + halfDayDeduction + penaltyDeduction
+  const totalBonuses = otPay
+  
+  const netPay = user.salary + totalBonuses - totalDeductions
 
   let deductionNote = ''
   if (penaltyDeduction > 0) {
-    deductionNote = `Salary cut for ${user.penaltyPoints} Penalty Points.`
+    deductionNote = `Salary cut for ${user.penaltyPoints} Penalty Points. `
+  }
+  if (lateDeduction > 0) {
+    deductionNote += `Late Deduction: ${lateDeduction}. `
+  }
+  if (halfDayDeduction > 0) {
+    deductionNote += `Half-day Deduction: ${halfDayDeduction}. `
+  }
+  
+  let bonusNote = ''
+  if (otPay > 0) {
+    bonusNote = `OT Pay: ${otPay} for ${otHoursTotal} hours.`
   }
 
   return {
@@ -97,11 +140,18 @@ export async function generatePaySheetData(userId: string, month: number, year: 
     month,
     year,
     baseSalary: user.salary,
-    paidDays: workingDays - unpaidLeaveDays - absentDays, // Equivalent to clockedDays + paidLeaveDays
-    unpaidDays: unpaidLeaveDays + absentDays,
+    paidDays,
+    unpaidDays,
     deductions: totalDeductions,
-    deductionNote: deductionNote || null,
-    bonuses: 0, // default, admin can change
+    deductionNote: deductionNote.trim() || null,
+    bonuses: totalBonuses,
+    bonusNote: bonusNote || null,
+    otHoursTotal,
+    otPay,
+    lateMinutesTotal,
+    lateDeduction,
+    halfDaysTotal,
+    halfDayDeduction,
     netPay,
     status: 'DRAFT' as const
   }

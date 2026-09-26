@@ -1,6 +1,7 @@
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getClientIp } from '@/lib/ip'
+import { processDailyAttendance } from '@/lib/attendance'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(req: NextRequest) {
@@ -61,6 +62,9 @@ export async function POST(req: NextRequest) {
       isValid: true,
     },
   })
+
+  // Fire and forget attendance processing
+  processDailyAttendance(userId, new Date()).catch(console.error)
 
   return NextResponse.json({ success: true, log })
 }

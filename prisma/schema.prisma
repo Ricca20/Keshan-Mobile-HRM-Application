@@ -31,6 +31,7 @@ model User {
   paySheets     PaySheet[]
   notifications Notification[]
   verifications WorkVerification[]
+  dailyAttendances DailyAttendance[]
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -149,6 +150,12 @@ model PaySheet {
   bonuses       Float          @default(0)
   deductionNote String?
   bonusNote     String?
+  otHoursTotal  Float          @default(0)
+  otPay         Float          @default(0)
+  lateMinutesTotal Int         @default(0)
+  lateDeduction Float          @default(0)
+  halfDaysTotal Int            @default(0)
+  halfDayDeduction Float       @default(0)
   netPay        Float
   status        PaySheetStatus @default(DRAFT)
   finalizedAt   DateTime?
@@ -217,4 +224,38 @@ model SystemSetting {
   value     String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model DailyAttendance {
+  id           String             @id @default(cuid())
+  userId       String
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date         DateTime           @db.Date
+  clockIn      DateTime?
+  clockOut     DateTime?
+  status       AttendanceStatus   @default(PRESENT)
+  
+  isLate       Boolean            @default(false)
+  lateMinutes  Int                @default(0)
+  
+  isHalfDay    Boolean            @default(false)
+  
+  otHours      Float              @default(0)
+  
+  overrideNote String?
+  updatedBy    String?            // Admin who modified the record
+
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@unique([userId, date])
+  @@index([userId])
+  @@index([date])
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  HALF_DAY
+  LEAVE
 }

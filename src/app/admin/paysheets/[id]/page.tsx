@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, CheckCircle2, Save, AlertTriangle, TrendingDown, TrendingUp, Building, CalendarDays, Calculator } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Save, AlertTriangle, TrendingDown, TrendingUp, Building, CalendarDays, Calculator, Clock } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -126,6 +126,23 @@ export default function PaysheetDetailPage() {
                 <div className="bg-orange-50 rounded-xl p-4 border border-orange-100 sm:col-span-1 col-span-2">
                   <p className="text-sm text-orange-600/80 font-medium mb-1 flex items-center gap-1.5"><CalendarDays className="w-4 h-4" /> Unpaid Days</p>
                   <p className="font-bold text-orange-900">{ps.unpaidDays}</p>
+                </div>
+                <div className="bg-indigo-50 rounded-xl p-4 border border-indigo-100 sm:col-span-3">
+                  <p className="text-sm text-indigo-600/80 font-medium mb-2 flex items-center gap-1.5"><Clock className="w-4 h-4" /> HRMS Breakdown</p>
+                  <div className="grid grid-cols-3 gap-4">
+                     <div>
+                        <p className="text-xs text-indigo-500 uppercase tracking-wider font-bold">OT Hours</p>
+                        <p className="font-bold text-indigo-900">{ps.otHoursTotal}h <span className="text-indigo-600 text-sm font-medium">(Rs. {ps.otPay})</span></p>
+                     </div>
+                     <div>
+                        <p className="text-xs text-indigo-500 uppercase tracking-wider font-bold">Late Minutes</p>
+                        <p className="font-bold text-indigo-900">{ps.lateMinutesTotal}m <span className="text-indigo-600 text-sm font-medium">(-Rs. {ps.lateDeduction})</span></p>
+                     </div>
+                     <div>
+                        <p className="text-xs text-indigo-500 uppercase tracking-wider font-bold">Half Days</p>
+                        <p className="font-bold text-indigo-900">{ps.halfDaysTotal} <span className="text-indigo-600 text-sm font-medium">(-Rs. {ps.halfDayDeduction})</span></p>
+                     </div>
+                  </div>
                 </div>
               </div>
             </CardContent>

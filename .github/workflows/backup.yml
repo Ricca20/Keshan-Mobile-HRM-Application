@@ -2,49 +2,28 @@ name: Automated Database Backup
 
 on:
   schedule:
-    - cron: '0 0 * * *' # Run daily at midnight UTC
+    - cron: '0 0 * * *' # Run daily at midnight UTC — keeps Supabase free-tier DB alive
   workflow_dispatch: # Allow manual triggers
 
 jobs:
   backup:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
 
-      - name: Generate Database Backup
-        id: dump
+      - name: Ping Database (Keep-Alive)
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           if [ -z "$DATABASE_URL" ]; then
-            echo "Error: DATABASE_URL secret is not set!"
+            echo "::error::DATABASE_URL secret is not set! Go to Settings > Secrets > Actions to add it."
             exit 1
           fi
-          
-          # Fix Supabase connection pooler port for pg_dump
-          # pg_dump requires session mode (port 6543) instead of transaction mode (port 5432)
-          PG_DUMP_URL="$DATABASE_URL"
-          if [[ "$PG_DUMP_URL" == *"pooler.supabase.com:5432"* ]]; then
-            echo "Detected Supabase pooler URL, switching to session mode port 6543 for pg_dump"
-            PG_DUMP_URL="${PG_DUMP_URL/pooler.supabase.com:5432/pooler.supabase.com:6543}"
-          fi
-          
-          # Remove pgbouncer query param if present
-          PG_DUMP_URL="${PG_DUMP_URL/\?pgbouncer=true/}"
-          
-          TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
-          FILENAME="phoneshop_hrm_backup_$TIMESTAMP.sql"
-          
-          echo "Dumping database to $FILENAME..."
-          # Using docker ensures we have a compatible pg_dump version and don't need to apt-get install
-          docker run --rm postgres:15-alpine pg_dump "$PG_DUMP_URL" --no-owner --no-privileges > "$FILENAME"
-          
-          echo "filename=$FILENAME" >> $GITHUB_OUTPUT
 
-      - name: Upload Backup Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.dump.outputs.filename }}
-          path: ${{ steps.dump.outputs.filename }}
-          retention-days: 30
+          echo "Pinging database to prevent Supabase free-tier suspension..."
+          psql "$DATABASE_URL" -c "SELECT 1;" -q
+
+          echo "Database is alive! Ping successful at $(date -u)."
