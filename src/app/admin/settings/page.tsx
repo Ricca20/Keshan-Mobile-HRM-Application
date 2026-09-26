@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useToast } from '@/components/ui/toast'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
+import { formatCurrency } from '@/lib/utils'
 
 export default function AdminSettingsPage() {
   const queryClient = useQueryClient()
@@ -221,9 +222,9 @@ export default function AdminSettingsPage() {
                 <Info className="w-3.5 h-3.5" /> Live Preview
               </h4>
               <div className="space-y-1 text-sm text-slate-600">
-                <p>Employee with <strong className="text-slate-900">{threshold - 1}</strong> points → <strong className="text-emerald-600">Rs. 0</strong> deducted</p>
-                <p>Employee with <strong className="text-slate-900">{threshold}</strong> points → <strong className="text-red-600">Rs. {amount.toLocaleString()}</strong> deducted</p>
-                <p>Employee with <strong className="text-slate-900">{threshold * 2 + 5}</strong> points → <strong className="text-red-600">Rs. {(amount * 2).toLocaleString()}</strong> deducted</p>
+                <p>Employee with <strong className="text-slate-900">{threshold - 1}</strong> points → <strong className="text-emerald-600">{formatCurrency(0)}</strong> deducted</p>
+                <p>Employee with <strong className="text-slate-900">{threshold}</strong> points → <strong className="text-red-600">{formatCurrency(amount)}</strong> deducted</p>
+                <p>Employee with <strong className="text-slate-900">{threshold * 2 + 5}</strong> points → <strong className="text-red-600">{formatCurrency(amount * 2)}</strong> deducted</p>
               </div>
             </div>
           </div>

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { useToast } from '@/components/ui/toast'
+import { formatCurrency } from '@/lib/utils'
 
 type PaySheet = {
   id: string
@@ -139,10 +140,10 @@ export default function AdminPaysheetsPage() {
                         <div className="text-sm font-medium text-slate-500 bg-slate-100 inline-block px-2.5 py-1 rounded-md">{ps.user.shop.name}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-600">
-                        Rs. {ps.baseSalary.toLocaleString()}
+                        {formatCurrency(ps.baseSalary)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-lg">Rs. {ps.netPay.toLocaleString()}</span>
+                        <span className="font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-lg">{formatCurrency(ps.netPay)}</span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Badge variant={ps.status === 'FINALIZED' ? 'success' : 'warning'} className="uppercase tracking-wider font-bold text-[10px]">

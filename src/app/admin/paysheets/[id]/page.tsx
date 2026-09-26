@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { useState, useEffect } from 'react'
 import { useToast } from '@/components/ui/toast'
 import { ConfirmModal } from '@/components/ui/modal'
+import { formatCurrency } from '@/lib/utils'
 
 export default function PaysheetDetailPage() {
   const { id } = useParams()
@@ -216,19 +217,19 @@ export default function PaysheetDetailPage() {
             <CardContent className="space-y-4 relative z-10">
               <div className="flex justify-between items-center text-sm">
                 <span className="text-slate-600 font-medium">Base Salary</span>
-                <span className="font-semibold text-slate-900">Rs. {ps.baseSalary.toLocaleString()}</span>
+                <span className="font-semibold text-slate-900">{formatCurrency(ps.baseSalary)}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-emerald-600 font-medium flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5" /> Bonuses</span>
-                <span className="font-semibold text-emerald-600">+ Rs. {bonuses.toLocaleString()}</span>
+                <span className="font-semibold text-emerald-600">+ {formatCurrency(bonuses)}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-red-600 font-medium flex items-center gap-1.5"><TrendingDown className="w-3.5 h-3.5" /> Deductions</span>
-                <span className="font-semibold text-red-600">- Rs. {deductions.toLocaleString()}</span>
+                <span className="font-semibold text-red-600">- {formatCurrency(deductions)}</span>
               </div>
               <div className="pt-4 border-t-2 border-dashed border-blue-200/60 flex justify-between items-center bg-white p-4 rounded-xl shadow-sm mt-4">
                 <span className="font-bold text-slate-900">Net Pay</span>
-                <span className="font-black text-2xl text-blue-600">Rs. {netPayPreview.toLocaleString()}</span>
+                <span className="font-black text-2xl text-blue-600">{formatCurrency(netPayPreview)}</span>
               </div>
             </CardContent>
           </Card>

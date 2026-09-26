@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { FileText, CalendarDays, Wallet, TrendingDown, TrendingUp, Download } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { useState } from 'react'
+import { formatCurrency } from '@/lib/utils'
 
 type PaySheet = {
   id: string
@@ -70,7 +71,7 @@ export default function EmployeePaysheetsPage() {
                         <h3 className={`font-bold ${isSelected ? 'text-blue-700' : 'text-slate-700'}`}>
                           {new Date(2000, ps.month - 1).toLocaleString('default', { month: 'long' })} {ps.year}
                         </h3>
-                        <p className="text-sm font-medium text-slate-500">Rs. {ps.netPay.toLocaleString()}</p>
+                        <p className="text-sm font-medium text-slate-500">{formatCurrency(ps.netPay)}</p>
                       </div>
                     </CardContent>
                   </Card>
@@ -124,7 +125,7 @@ export default function EmployeePaysheetsPage() {
                 <div className="space-y-4">
                   <div className="flex justify-between items-center py-2">
                     <span className="text-slate-600 font-medium">Base Salary</span>
-                    <span className="font-semibold text-slate-900">Rs. {selectedPaysheet.baseSalary.toLocaleString()}</span>
+                    <span className="font-semibold text-slate-900">{formatCurrency(selectedPaysheet.baseSalary)}</span>
                   </div>
                   
                   <div className="flex justify-between items-start py-2 group">
@@ -138,7 +139,7 @@ export default function EmployeePaysheetsPage() {
                         {selectedPaysheet.deductionNote && <span className="text-xs text-red-500/80 mt-1 bg-red-50 p-1.5 rounded-md inline-block max-w-[200px]">{selectedPaysheet.deductionNote}</span>}
                       </div>
                     </div>
-                    <span className="font-semibold text-red-600">- Rs. {selectedPaysheet.deductions.toLocaleString()}</span>
+                    <span className="font-semibold text-red-600">- {formatCurrency(selectedPaysheet.deductions)}</span>
                   </div>
                   
                   <div className="flex justify-between items-start py-2 group">
@@ -151,14 +152,14 @@ export default function EmployeePaysheetsPage() {
                         {selectedPaysheet.bonusNote && <span className="text-xs text-emerald-600/80 mt-1 bg-emerald-50 p-1.5 rounded-md inline-block max-w-[200px]">{selectedPaysheet.bonusNote}</span>}
                       </div>
                     </div>
-                    <span className="font-semibold text-emerald-600">+ Rs. {selectedPaysheet.bonuses.toLocaleString()}</span>
+                    <span className="font-semibold text-emerald-600">+ {formatCurrency(selectedPaysheet.bonuses)}</span>
                   </div>
 
                   <div className="my-6 border-t-2 border-dashed border-slate-200"></div>
 
                   <div className="flex justify-between items-center bg-blue-50 p-6 rounded-2xl">
                     <span className="font-bold text-lg text-blue-900">Net Pay</span>
-                    <span className="font-black text-3xl text-blue-600">Rs. {selectedPaysheet.netPay.toLocaleString()}</span>
+                    <span className="font-black text-3xl text-blue-600">{formatCurrency(selectedPaysheet.netPay)}</span>
                   </div>
                 </div>
               </div>

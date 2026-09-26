@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/toast'
 import { ConfirmModal } from '@/components/ui/modal'
+import { formatCurrency } from '@/lib/utils'
 
 type Shop = {
   id: string
@@ -250,7 +251,7 @@ export default function AdminEmployeesPage() {
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-slate-500 flex items-center gap-1.5"><Banknote className="h-3.5 w-3.5" /> Salary</span>
-                    <span className="font-medium text-slate-700">Rs. {employee.salary.toLocaleString()}</span>
+                    <span className="font-medium text-slate-700">{formatCurrency(employee.salary)}</span>
                   </div>
                 </div>
 

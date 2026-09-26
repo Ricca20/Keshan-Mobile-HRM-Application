@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { Clock, Calendar, TreePalm, Receipt, ArrowRight, Sparkles, MapPin } from 'lucide-react'
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
+import { formatCurrency } from '@/lib/utils'
 
 export default async function EmployeeDashboard() {
   const session = await auth()
@@ -200,8 +201,7 @@ export default async function EmployeeDashboard() {
                     {latestPaysheet ? (
                       <>
                         <div className="flex items-baseline gap-1 sm:justify-end">
-                          <span className="text-xl font-bold text-slate-400">Rs.</span>
-                          <span className="text-3xl font-black text-slate-900 tracking-tight">{latestPaysheet.netPay.toLocaleString()}</span>
+                          <span className="text-3xl font-black text-slate-900 tracking-tight">{formatCurrency(latestPaysheet.netPay)}</span>
                         </div>
                         <p className="text-sm font-medium text-emerald-600 mt-1 bg-emerald-50 inline-flex px-2 py-0.5 rounded-md">
                           {new Date(2000, latestPaysheet.month - 1).toLocaleString('default', { month: 'short' })} {latestPaysheet.year}
