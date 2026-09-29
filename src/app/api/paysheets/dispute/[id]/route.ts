@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/lib/auth'
 import { validate, disputeSchema } from '@/lib/validation'
-import { PaySheetStatus } from '@/generated/prisma'
+import { PaySheetStatus } from '@/generated/prisma/client'
 
 export async function POST(
   req: Request,

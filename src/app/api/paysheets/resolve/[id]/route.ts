@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/lib/auth'
-import { PaySheetStatus } from '@/generated/prisma'
+import { PaySheetStatus } from '@/generated/prisma/client'
 
 /**
  * POST /api/paysheets/resolve/[id]
