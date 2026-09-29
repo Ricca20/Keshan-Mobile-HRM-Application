@@ -1,8 +1,8 @@
-name: Automated Database Backup
+name: Database Backup (Free Tier)
 
 on:
   schedule:
-    - cron: '0 0 * * *' # Run daily at midnight UTC — keeps Supabase free-tier DB alive
+    - cron: '0 22 * * *' # Daily at 22:00 UTC = 03:30 AM Sri Lanka Time
   workflow_dispatch: # Allow manual triggers
 
 jobs:
@@ -10,20 +10,50 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
       - name: Install PostgreSQL client
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-client
 
-      - name: Ping Database (Keep-Alive)
+      - name: Verify database is reachable
         run: |
           if [ -z "$DATABASE_URL" ]; then
-            echo "::error::DATABASE_URL secret is not set! Go to Settings > Secrets > Actions to add it."
+            echo "::error::DATABASE_URL secret is not set!"
             exit 1
           fi
-
-          echo "Pinging database to prevent Supabase free-tier suspension..."
+          echo "Pinging database..."
           psql "$DATABASE_URL" -c "SELECT 1;" -q
+          echo "Database is alive at $(date -u)."
 
-          echo "Database is alive! Ping successful at $(date -u)."
+      - name: Export database tables as CSV
+        run: |
+          mkdir -p backups/$(date +%Y-%m)
+
+          TABLES="User Shop ClockLog LeaveType LeaveBalance LeaveRequest PaySheet Notification WorkVerification DailyAttendance"
+          TIMESTAMP=$(date +%Y-%m-%d)
+
+          for TABLE in $TABLES; do
+            echo "Backing up table: $TABLE"
+            psql "$DATABASE_URL" -q -c "\COPY \"$TABLE\" TO STDOUT WITH CSV HEADER" \
+              > "backups/$(date +%Y-%m)/${TABLE}_${TIMESTAMP}.csv" 2>/dev/null || \
+              echo "Warning: Could not back up $TABLE (may be empty or name case mismatch)"
+          done
+
+          echo "Backup completed at $TIMESTAMP" > backups/$(date +%Y-%m)/backup_manifest.txt
+          echo "Tables attempted: $TABLES" >> backups/$(date +%Y-%m)/backup_manifest.txt
+
+      - name: Commit backup to repository
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          git add backups/
+          git diff --staged --quiet || git commit -m "chore: automated backup $(date +%Y-%m-%d)"
+          git push origin HEAD:backups --force

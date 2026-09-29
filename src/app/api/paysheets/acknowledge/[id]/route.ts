@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/lib/auth'
+import { PaySheetStatus } from '@/generated/prisma'
 
 export async function POST(
   req: Request,
@@ -18,18 +19,18 @@ export async function POST(
       select: { userId: true, status: true }
     })
 
-    if (!paysheet || paysheet.userId !== session.user.id) {
+    if (!paysheet || paysheet.userId !== (session.user as any).id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    if (paysheet.status !== 'PAYMENT_CLAIMED') {
+    if (paysheet.status !== PaySheetStatus.PAYMENT_CLAIMED) {
       return NextResponse.json({ error: 'Paysheet is not awaiting acknowledgment' }, { status: 400 })
     }
 
     const updated = await prisma.paySheet.update({
       where: { id },
       data: {
-        status: 'ACKNOWLEDGED',
+        status: PaySheetStatus.ACKNOWLEDGED,
         acknowledgedAt: new Date(),
       }
     })

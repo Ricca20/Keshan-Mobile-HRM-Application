@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/lib/auth'
+import { validate, disputeSchema } from '@/lib/validation'
+import { PaySheetStatus } from '@/generated/prisma'
 
 export async function POST(
   req: Request,
@@ -18,25 +20,23 @@ export async function POST(
       select: { userId: true, status: true }
     })
 
-    if (!paysheet || paysheet.userId !== session.user.id) {
+    if (!paysheet || paysheet.userId !== (session.user as any).id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    if (paysheet.status !== 'PAYMENT_CLAIMED') {
+    if (paysheet.status !== PaySheetStatus.PAYMENT_CLAIMED) {
       return NextResponse.json({ error: 'Paysheet is not awaiting acknowledgment' }, { status: 400 })
     }
 
-    const body = await req.json()
-    const { reason } = body
-
-    if (!reason) {
-      return NextResponse.json({ error: 'Dispute reason is required' }, { status: 400 })
-    }
+    const rawBody = await req.json()
+    const validation = validate(disputeSchema, rawBody)
+    if (!validation.success) return validation.response
+    const { reason } = validation.data
 
     const updated = await prisma.paySheet.update({
       where: { id },
       data: {
-        status: 'DISPUTED',
+        status: PaySheetStatus.DISPUTED,
         disputeReason: reason,
       }
     })

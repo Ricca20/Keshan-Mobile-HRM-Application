@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/lib/auth'
+import { validate, markPaidSchema } from '@/lib/validation'
+import { PaySheetStatus } from '@/generated/prisma'
 
 export async function POST(
   req: Request,
@@ -13,14 +15,16 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = await req.json()
-    const { paymentReference } = body
+    const rawBody = await req.json()
+    const validation = validate(markPaidSchema, rawBody)
+    if (!validation.success) return validation.response
+    const { paymentReference } = validation.data
 
     const paysheet = await prisma.paySheet.update({
       where: { id },
       data: {
-        status: 'PAYMENT_CLAIMED',
-        paymentReference,
+        status: PaySheetStatus.PAYMENT_CLAIMED,
+        paymentReference: paymentReference ?? null,
         paidAt: new Date(),
       }
     })

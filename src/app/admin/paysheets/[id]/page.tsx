@@ -105,6 +105,23 @@ export default function PaysheetDetailPage() {
     onError: (err: any) => toast.error(err.message)
   })
 
+  const resolveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/paysheets/resolve/${id}`, { method: 'POST' })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Failed to resolve dispute')
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['paysheet', id] })
+      queryClient.invalidateQueries({ queryKey: ['paysheets'] })
+      toast.success('Dispute resolved. Employee will re-acknowledge.')
+    },
+    onError: (err: any) => toast.error(err.message)
+  })
+
   if (isLoading) {
     return (
       <div className="flex justify-center p-12">
@@ -334,9 +351,16 @@ export default function PaysheetDetailPage() {
               <p className="text-sm text-red-700 mb-2">
                 The employee disputed this payment.
               </p>
-              <div className="bg-white p-3 rounded-lg border border-red-200 text-sm text-slate-700">
+              <div className="bg-white p-3 rounded-lg border border-red-200 text-sm text-slate-700 mb-4">
                 <strong>Reason:</strong> {ps.disputeReason}
               </div>
+              <Button
+                className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold h-11"
+                onClick={() => resolveMutation.mutate()}
+                isLoading={resolveMutation.isPending}
+              >
+                Resolve & Re-Issue Payment
+              </Button>
             </div>
           )}
         </div>
