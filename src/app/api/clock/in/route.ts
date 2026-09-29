@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   // Validation check: IP Address strict validation
   // We allow "127.0.0.1" for local development bypassing
   const allowedIps = shop.allowedIp.split(',').map(ip => ip.trim())
-  const ipPass = allowedIps.includes(requestIp) || requestIp === '127.0.0.1' || process.env.NODE_ENV === 'development'
+  const ipPass = allowedIps.includes(requestIp) || requestIp === '127.0.0.1'
 
   if (!ipPass) {
     // Record the failed attempt as flagged

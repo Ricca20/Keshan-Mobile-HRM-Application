@@ -3,8 +3,10 @@ import { NextResponse } from 'next/server'
 import { sendNotificationEmail } from '@/lib/mail'
 
 export async function GET(req: Request) {
-  // Optional: Check a cron secret token here
-  // if (req.headers.get('Authorization') !== `Bearer ${process.env.CRON_SECRET}`) { ... }
+  const cronSecret = req.headers.get('x-cron-secret')
+  if (!cronSecret || cronSecret !== process.env.CRON_SECRET) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   try {
     const now = new Date()

@@ -29,9 +29,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       return NextResponse.json({ error: 'Paysheet not found' }, { status: 404 })
     }
 
-    // Employees can only see their own FINALIZED paysheets
+    // Employees can only access their own paysheets in any post-finalized state
     if ((session.user as any).role === 'EMPLOYEE') {
-      if (paysheet.userId !== (session.user as any).id || paysheet.status !== 'FINALIZED') {
+      const allowedStatuses = ['FINALIZED', 'PAYMENT_CLAIMED', 'ACKNOWLEDGED', 'DISPUTED']
+      if (
+        paysheet.userId !== (session.user as any).id ||
+        !allowedStatuses.includes(paysheet.status)
+      ) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }
     }

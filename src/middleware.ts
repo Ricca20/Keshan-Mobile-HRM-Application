@@ -45,7 +45,6 @@ export async function middleware(req: NextRequest) {
   // Allow static assets, images, and API auth routes
   if (
     nextUrl.pathname.startsWith('/api/auth') ||
-    nextUrl.pathname.startsWith('/api/test-db') ||
     nextUrl.pathname.startsWith('/_next') ||
     nextUrl.pathname.match(/\.(jpg|jpeg|png|svg|ico|gif|webp)$/i)
   ) {
@@ -78,8 +77,28 @@ export async function middleware(req: NextRequest) {
 
     // Strict API Route Validation
     if (nextUrl.pathname.startsWith('/api')) {
-      const adminOnlyApis = ['/api/employees', '/api/shops', '/api/paysheets/generate', '/api/paysheets/finalize', '/api/paysheets/export', '/api/leave/types', '/api/verification/send', '/api/verification/penalize']
-      const employeeOnlyApis = ['/api/clock/in', '/api/clock/out', '/api/verification/check']
+      const adminOnlyApis = [
+        '/api/employees',
+        '/api/shops',
+        '/api/paysheets/generate',
+        '/api/paysheets/finalize',
+        '/api/paysheets/export',
+        '/api/paysheets/pay',
+        '/api/paysheets/resolve',
+        '/api/leave/types',
+        '/api/verification/send',
+        '/api/verification/penalize',
+        '/api/admin',
+        '/api/cron',
+        '/api/hrms',
+      ]
+      const employeeOnlyApis = [
+        '/api/clock/in',
+        '/api/clock/out',
+        '/api/verification/check',
+        '/api/paysheets/acknowledge',
+        '/api/paysheets/dispute',
+      ]
 
       const isAdminApi = adminOnlyApis.some(route => nextUrl.pathname.startsWith(route))
       const isEmployeeApi = employeeOnlyApis.some(route => nextUrl.pathname.startsWith(route))

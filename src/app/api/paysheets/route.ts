@@ -19,10 +19,11 @@ export async function GET(req: Request) {
     if (month) where.month = parseInt(month)
     if (year) where.year = parseInt(year)
 
-    // Employees can only see their own FINALIZED paysheets
+    // Employees can only see their own post-finalized paysheets
     if ((session.user as any).role === 'EMPLOYEE') {
       where.userId = (session.user as any).id
-      where.status = 'FINALIZED'
+      // Include all statuses the employee should be able to see and act on
+      where.status = { in: ['FINALIZED', 'PAYMENT_CLAIMED', 'ACKNOWLEDGED', 'DISPUTED'] }
     } else if (userId) {
       where.userId = userId
     }

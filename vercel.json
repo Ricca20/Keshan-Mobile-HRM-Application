@@ -2,11 +2,17 @@
   "crons": [
     {
       "path": "/api/cron/verifications",
-      "schedule": "0 0 * * *"
+      "schedule": "0 0 * * *",
+      "headers": {
+        "x-cron-secret": "${CRON_SECRET}"
+      }
     },
     {
       "path": "/api/cron/daily",
-      "schedule": "59 23 * * *"
+      "schedule": "30 18 * * *",
+      "headers": {
+        "x-cron-secret": "${CRON_SECRET}"
+      }
     }
   ]
 }
