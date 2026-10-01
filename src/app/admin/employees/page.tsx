@@ -245,13 +245,13 @@ export default function AdminEmployeesPage() {
                 </div>
 
                 <div className="space-y-2 text-sm mt-auto mb-5 bg-slate-50 rounded-xl p-3 border border-slate-100">
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500 flex items-center gap-1.5"><Building className="h-3.5 w-3.5" /> Shop</span>
-                    <span className="font-medium text-slate-700">{employee.shop?.name || 'Unassigned'}</span>
+                  <div className="flex justify-between items-start gap-2">
+                    <span className="text-slate-500 flex items-center gap-1.5 whitespace-nowrap pt-0.5"><Building className="h-3.5 w-3.5 shrink-0" /> Shop</span>
+                    <span className="font-medium text-slate-700 text-right break-words line-clamp-2">{employee.shop?.name || 'Unassigned'}</span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500 flex items-center gap-1.5"><Banknote className="h-3.5 w-3.5" /> Salary</span>
-                    <span className="font-medium text-slate-700">{formatCurrency(employee.salary)}</span>
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="text-slate-500 flex items-center gap-1.5 whitespace-nowrap"><Banknote className="h-3.5 w-3.5 shrink-0" /> Salary</span>
+                    <span className="font-medium text-slate-700 text-right truncate">{formatCurrency(employee.salary)}</span>
                   </div>
                 </div>
 

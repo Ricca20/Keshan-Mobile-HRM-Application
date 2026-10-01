@@ -24,9 +24,18 @@ function SetupPasswordForm() {
     }
   }, [token])
 
+  const hasMinLength = password.length >= 8
+  const hasUppercase = /[A-Z]/.test(password)
+  const hasNumber = /[0-9]/.test(password)
+  const isPasswordValid = hasMinLength && hasUppercase && hasNumber
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+
+    if (!isPasswordValid) {
+      return setError('Password does not meet the requirements')
+    }
 
     if (password !== confirmPassword) {
       return setError('Passwords do not match')
@@ -82,7 +91,7 @@ function SetupPasswordForm() {
           Set up your password
         </h2>
         <p className="mt-2 text-center text-sm text-slate-600 max-w-sm mx-auto">
-          Welcome! Your new password must be at least 8 characters and contain at least one uppercase letter and one number.
+          Welcome! Create a secure password for your new account.
         </p>
       </div>
 
@@ -154,10 +163,26 @@ function SetupPasswordForm() {
                 </div>
               </div>
 
+              <div className="space-y-2.5 bg-slate-50 border border-slate-100 rounded-xl p-4">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Password Requirements</p>
+                <div className={`flex items-center gap-2 text-sm transition-colors ${hasMinLength ? 'text-emerald-600' : 'text-slate-500'}`}>
+                  {hasMinLength ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <div className="w-4 h-4 rounded-full border border-slate-300 shrink-0" />}
+                  <span>At least 8 characters long</span>
+                </div>
+                <div className={`flex items-center gap-2 text-sm transition-colors ${hasUppercase ? 'text-emerald-600' : 'text-slate-500'}`}>
+                  {hasUppercase ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <div className="w-4 h-4 rounded-full border border-slate-300 shrink-0" />}
+                  <span>Contains at least one uppercase letter</span>
+                </div>
+                <div className={`flex items-center gap-2 text-sm transition-colors ${hasNumber ? 'text-emerald-600' : 'text-slate-500'}`}>
+                  {hasNumber ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <div className="w-4 h-4 rounded-full border border-slate-300 shrink-0" />}
+                  <span>Contains at least one number</span>
+                </div>
+              </div>
+
               <div>
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || !isPasswordValid || password !== confirmPassword}
                   className="w-full flex justify-center items-center py-2.5 px-4 border border-transparent rounded-xl shadow-sm text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? (
