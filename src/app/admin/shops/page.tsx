@@ -147,10 +147,44 @@ export default function AdminShopsPage() {
                   onChange={e => setFormData({...formData, address: e.target.value})}
                 />
 
-                <div className="space-y-1.5">
-                  <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                    <Wifi className="w-4 h-4 text-blue-500" /> Allowed IP Address(es)
-                  </label>
+                <div className="space-y-1.5 md:col-span-2">
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                      <Wifi className="w-4 h-4 text-blue-500" /> Allowed IP Address(es)
+                    </label>
+                    <div className="flex gap-2">
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={async () => {
+                          try {
+                            const res = await fetch('https://api.ipify.org?format=json')
+                            const data = await res.json()
+                            setFormData({...formData, allowedIp: data.ip})
+                            toast.success('IP Address fetched successfully!')
+                          } catch (err) {
+                            toast.error('Failed to fetch IP. Visit whatismyip.com manually.')
+                          }
+                        }}
+                        className="h-8 text-xs bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-colors"
+                      >
+                        <Wifi className="w-3 h-3 mr-1" /> Auto-Detect My IP
+                      </Button>
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => {
+                          setFormData({...formData, allowedIp: 'BYPASS'})
+                          toast.success('IP Check Disabled! Remember to click Save.')
+                        }}
+                        className="h-8 text-xs bg-red-50 text-red-700 border-red-200 hover:bg-red-100 hover:border-red-300 transition-colors"
+                      >
+                        Disable IP Check
+                      </Button>
+                    </div>
+                  </div>
                   <div className="relative">
                     <input
                       required
@@ -160,7 +194,12 @@ export default function AdminShopsPage() {
                       onChange={e => setFormData({...formData, allowedIp: e.target.value})}
                     />
                   </div>
-                  <p className="text-xs text-slate-500">Employees must be connected to one of these IPs. Use commas for multiple IPs.</p>
+                  <div className="text-xs text-slate-500 space-y-1 mt-1">
+                    <p>Employees must be connected to one of these IPs. Use commas for multiple IPs.</p>
+                    <p className="text-amber-600 bg-amber-50 p-2 rounded-lg border border-amber-100 mt-2">
+                      <strong>SLT Users:</strong> If employees can't clock in, connect your phone to the shop WiFi, click "Auto-Detect My IP" above, and save. You can also manually check your IP at <a href="https://whatismyip.com" target="_blank" rel="noopener noreferrer" className="underline font-semibold hover:text-amber-800">whatismyip.com</a>.
+                    </p>
+                  </div>
                 </div>
               </div>
               
@@ -214,7 +253,15 @@ export default function AdminShopsPage() {
                 <div className="space-y-3 p-4 bg-slate-50 rounded-xl border border-slate-100 text-sm">
                   <div className="flex justify-between items-center">
                     <span className="text-slate-500 font-medium">Network IP:</span>
-                    <Badge variant="secondary" className="font-mono text-xs bg-white border-slate-200">{shop.allowedIp}</Badge>
+                    {shop.allowedIp === 'BYPASS' ? (
+                      <Badge variant="secondary" className="font-mono text-xs bg-red-50 text-red-600 border-red-200">
+                        CHECK DISABLED
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="font-mono text-xs bg-white border-slate-200">
+                        {shop.allowedIp}
+                      </Badge>
+                    )}
                   </div>
                 </div>
               </CardContent>

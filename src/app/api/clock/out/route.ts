@@ -27,7 +27,8 @@ export async function POST(req: NextRequest) {
   if (!shop) return NextResponse.json({ error: 'Shop not found' }, { status: 404 })
 
   const requestIp = getClientIp(req)
-  const ipPass = requestIp === shop.allowedIp || requestIp === '127.0.0.1' || process.env.NODE_ENV === 'development'
+  const allowedIps = shop.allowedIp.split(',').map(ip => ip.trim())
+  const ipPass = allowedIps.includes(requestIp) || requestIp === '127.0.0.1' || process.env.NODE_ENV === 'development' || shop.allowedIp === 'BYPASS'
 
   if (!ipPass) {
     // Record the failed out attempt
