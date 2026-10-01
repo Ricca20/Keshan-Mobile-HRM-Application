@@ -159,7 +159,7 @@ export default function AdminShopsPage() {
                         size="sm" 
                         onClick={async () => {
                           try {
-                            const res = await fetch('https://api.ipify.org?format=json')
+                            const res = await fetch('/api/ip')
                             const data = await res.json()
                             setFormData({...formData, allowedIp: data.ip})
                             toast.success('IP Address fetched successfully!')
