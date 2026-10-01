@@ -69,7 +69,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     // Recalculate net pay
     const newBonuses = validatedData.bonuses ?? paysheet.bonuses
     const newDeductions = validatedData.deductions ?? paysheet.deductions
-    const newNetPay = paysheet.baseSalary - newDeductions + newBonuses
+    const newNetPay = paysheet.baseSalary + paysheet.otPay - newDeductions + newBonuses
 
     const updated = await prisma.paySheet.update({
       where: { id },

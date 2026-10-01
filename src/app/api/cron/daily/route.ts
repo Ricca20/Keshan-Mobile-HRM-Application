@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { processDailyAttendance } from '@/lib/attendance'
 import { NextResponse } from 'next/server'
 
 export async function GET(req: Request) {
@@ -38,6 +39,12 @@ export async function GET(req: Request) {
         })
         autoClosedCount++
       }
+    }
+
+    // 1.5 Finalize attendance for yesterday (Missing clock outs -> Half day, No logs -> Absent)
+    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+    for (const user of activeUsers) {
+      await processDailyAttendance(user.id, yesterday).catch(console.error)
     }
 
     // 2. Data Archiving
