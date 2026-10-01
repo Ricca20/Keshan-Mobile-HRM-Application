@@ -17,6 +17,10 @@ async function main() {
   await prisma.leaveRequest.deleteMany()
   await prisma.leaveBalance.deleteMany()
   await prisma.clockLog.deleteMany()
+  await prisma.passwordResetToken.deleteMany()
+  await prisma.dailyAttendance.deleteMany()
+  await prisma.workVerification.deleteMany()
+  await prisma.notification.deleteMany()
   await prisma.user.deleteMany()
   await prisma.leaveType.deleteMany()
   await prisma.shop.deleteMany()
@@ -50,7 +54,7 @@ async function main() {
 
   const admin = await prisma.user.create({
     data: {
-      name: 'Shop Owner', email: 'owner@phoneshop.lk', password: adminPassword,
+      name: 'Shop Owner', email: 'kethminakeshan89@gmail.com', password: adminPassword,
       role: 'ADMIN', salary: 0, shopId: shops[0].id,
     }
   })
@@ -199,7 +203,7 @@ async function main() {
 
   console.log('\n🎉 Comprehensive Seed Complete!')
   console.log('\n📋 Login credentials:')
-  console.log('   Admin: owner@phoneshop.lk / changeme123')
+  console.log('   Admin: kethminakeshan89@gmail.com / changeme123')
   console.log('   Employee: john@phoneshop.lk / employee123')
   console.log('   Employee: jane@phoneshop.lk / employee123')
 }
