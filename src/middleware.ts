@@ -38,7 +38,10 @@ export async function middleware(req: NextRequest) {
   })
 
   const isLoggedIn = !!token
-  const isAuthRoute = nextUrl.pathname.startsWith('/login')
+  const isAuthRoute = nextUrl.pathname.startsWith('/login') || 
+                      nextUrl.pathname.startsWith('/setup-password') || 
+                      nextUrl.pathname.startsWith('/reset-password') || 
+                      nextUrl.pathname.startsWith('/forgot-password')
   const isAdminRoute = nextUrl.pathname.startsWith('/admin')
   const isEmployeeRoute = nextUrl.pathname.startsWith('/employee')
 
