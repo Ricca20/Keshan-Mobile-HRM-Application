@@ -1,5 +1,8 @@
 import { prisma } from './prisma'
-import { startOfDay, endOfDay, differenceInMinutes, parse, differenceInHours } from 'date-fns'
+import { differenceInMinutes, differenceInHours, parse } from 'date-fns'
+import { toZonedTime, fromZonedTime } from 'date-fns-tz'
+
+const TZ = 'Asia/Colombo'
 
 export async function getSetting(key: string, defaultValue: string) {
   const setting = await prisma.systemSetting.findUnique({ where: { key } })
@@ -14,9 +17,14 @@ export async function processDailyAttendance(userId: string, date: Date) {
   const maxLateForHalfDay = parseInt(await getSetting('MAX_LATE_MINS_FOR_HALF_DAY', '60'))
   const minHoursForFullDay = parseInt(await getSetting('MIN_HOURS_FOR_FULL_DAY', '4'))
   
-  // 2. Fetch clock logs for this user on this date
-  const start = startOfDay(date)
-  const end = endOfDay(date)
+  // 2. Get today's date in Asia/Colombo timezone
+  // e.g. if UTC is 2026-10-04 18:31 → Colombo is 2026-10-05 00:01
+  const dateStr = date.toLocaleDateString('en-CA', { timeZone: TZ }) // 'YYYY-MM-DD'
+  // Build midnight Colombo as UTC for DB range queries
+  const start = fromZonedTime(`${dateStr}T00:00:00`, TZ)
+  const end = fromZonedTime(`${dateStr}T23:59:59.999`, TZ)
+  // Use start as the canonical "date" key for DailyAttendance (stored as @db.Date)
+  const attendanceDate = new Date(`${dateStr}T00:00:00.000Z`)
 
   const logs = await prisma.clockLog.findMany({
     where: {
@@ -26,6 +34,7 @@ export async function processDailyAttendance(userId: string, date: Date) {
     },
     orderBy: { timestamp: 'asc' }
   })
+
 
   // 3. Process logs
   if (logs.length === 0) {
@@ -41,8 +50,8 @@ export async function processDailyAttendance(userId: string, date: Date) {
      const status = leaves ? 'LEAVE' : 'ABSENT'
      
      return prisma.dailyAttendance.upsert({
-        where: { userId_date: { userId, date: start } },
-        create: { userId, date: start, status },
+        where: { userId_date: { userId, date: attendanceDate } },
+        create: { userId, date: attendanceDate, status },
         update: { status, clockIn: null, clockOut: null, isLate: false, isHalfDay: false, otHours: 0, lateMinutes: 0 }
      })
   }
@@ -56,9 +65,11 @@ export async function processDailyAttendance(userId: string, date: Date) {
   let isHalfDay = false
   let otHours = 0
   
-  // Parse shift times relative to the current date
-  const shiftStart = parse(shiftStartTimeStr, 'HH:mm', start)
-  const shiftEnd = parse(shiftEndTimeStr, 'HH:mm', start)
+  // Parse shift times relative to the Colombo midnight reference point
+  // e.g. '09:00' → 09:00 Colombo time (which is UTC+5:30)
+  const colomboMidnight = fromZonedTime(`${dateStr}T00:00:00`, TZ)
+  const shiftStart = parse(shiftStartTimeStr, 'HH:mm', colomboMidnight)
+  const shiftEnd = parse(shiftEndTimeStr, 'HH:mm', colomboMidnight)
 
   if (firstIn) {
      const diffMins = differenceInMinutes(firstIn, shiftStart)
@@ -91,9 +102,9 @@ export async function processDailyAttendance(userId: string, date: Date) {
   const status = isHalfDay ? 'HALF_DAY' : 'PRESENT'
 
   return prisma.dailyAttendance.upsert({
-     where: { userId_date: { userId, date: start } },
+     where: { userId_date: { userId, date: attendanceDate } },
      create: {
-        userId, date: start, clockIn: firstIn, clockOut: lastOut,
+        userId, date: attendanceDate, clockIn: firstIn, clockOut: lastOut,
         status, isLate, lateMinutes, isHalfDay, otHours
      },
      update: {

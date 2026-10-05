@@ -13,6 +13,10 @@ export async function POST(req: NextRequest) {
   const userId = (session.user as any).id
   const shopId = (session.user as any).shopId
 
+  if (!shopId) {
+    return NextResponse.json({ error: 'You are not assigned to a shop. Please contact your admin.' }, { status: 403 })
+  }
+
   // Ensure they are currently clocked in
   const lastLog = await prisma.clockLog.findFirst({
     where: { userId, isValid: true },
@@ -24,7 +28,8 @@ export async function POST(req: NextRequest) {
   }
 
   const shop = await prisma.shop.findUnique({ where: { id: shopId } })
-  if (!shop) return NextResponse.json({ error: 'Shop not found' }, { status: 404 })
+  if (!shop) return NextResponse.json({ error: 'Your assigned shop was not found. Please contact your admin.' }, { status: 404 })
+
 
   const requestIp = getClientIp(req)
   const allowedIps = shop.allowedIp.split(',').map(ip => ip.trim())
@@ -60,8 +65,13 @@ export async function POST(req: NextRequest) {
     },
   })
 
-  // Fire and forget attendance processing
-  processDailyAttendance(userId, new Date()).catch(console.error)
+  // Process attendance — await so errors are caught, not silently lost
+  try {
+    await processDailyAttendance(userId, new Date())
+  } catch (attendanceErr) {
+    console.error('[Clock OUT] processDailyAttendance failed:', attendanceErr)
+    // Clock-out is still recorded — attendance can be reprocessed by cron or admin
+  }
 
   return NextResponse.json({ success: true, log })
 }
