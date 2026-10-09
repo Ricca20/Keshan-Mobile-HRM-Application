@@ -1,59 +1,53 @@
-name: Database Backup (Free Tier)
+name: Database Backup (Encrypted)
+
+# This repository is PUBLIC. Backups are never committed; they are encrypted with
+# BACKUP_PASSPHRASE and uploaded as a short-lived workflow artifact.
+# Restore: gpg --decrypt backup.sql.gz.gpg | gunzip | psql "$DATABASE_URL"
 
 on:
   schedule:
     - cron: '0 22 * * *' # Daily at 22:00 UTC = 03:30 AM Sri Lanka Time
-  workflow_dispatch: # Allow manual triggers
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   backup:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
+      - name: Check secrets
+        run: |
+          if [ -z "$DATABASE_URL" ] || [ -z "$BACKUP_PASSPHRASE" ]; then
+            echo "::error::DATABASE_URL and BACKUP_PASSPHRASE secrets must both be set."
+            exit 1
+          fi
 
       - name: Install PostgreSQL client
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-client
 
-      - name: Verify database is reachable
+      - name: Dump, compress and encrypt
         run: |
-          if [ -z "$DATABASE_URL" ]; then
-            echo "::error::DATABASE_URL secret is not set!"
-            exit 1
-          fi
-          echo "Pinging database..."
-          psql "$DATABASE_URL" -c "SELECT 1;" -q
-          echo "Database is alive at $(date -u)."
+          set -euo pipefail
+          # psql/pg_dump reject Prisma/Supabase-only query params such as ?pgbouncer=true
+          PG_URL="${DATABASE_URL%%\?*}"
+          umask 077
+          pg_dump "$PG_URL" --no-owner --no-privileges \
+            | gzip \
+            | gpg --batch --yes --symmetric --cipher-algo AES256 \
+                  --passphrase "$BACKUP_PASSPHRASE" -o backup.sql.gz.gpg
+          ls -l backup.sql.gz.gpg
 
-      - name: Export database tables as CSV
-        run: |
-          mkdir -p backups/$(date +%Y-%m)
-
-          TABLES="User Shop ClockLog LeaveType LeaveBalance LeaveRequest PaySheet Notification WorkVerification DailyAttendance"
-          TIMESTAMP=$(date +%Y-%m-%d)
-
-          for TABLE in $TABLES; do
-            echo "Backing up table: $TABLE"
-            psql "$DATABASE_URL" -q -c "\COPY \"$TABLE\" TO STDOUT WITH CSV HEADER" \
-              > "backups/$(date +%Y-%m)/${TABLE}_${TIMESTAMP}.csv" 2>/dev/null || \
-              echo "Warning: Could not back up $TABLE (may be empty or name case mismatch)"
-          done
-
-          echo "Backup completed at $TIMESTAMP" > backups/$(date +%Y-%m)/backup_manifest.txt
-          echo "Tables attempted: $TABLES" >> backups/$(date +%Y-%m)/backup_manifest.txt
-
-      - name: Commit backup to repository
-        run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "actions@github.com"
-          git add backups/
-          git diff --staged --quiet || git commit -m "chore: automated backup $(date +%Y-%m-%d)"
-          git push origin HEAD:backups --force
+      - name: Upload encrypted backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ github.run_id }}
+          path: backup.sql.gz.gpg
+          retention-days: 14
+          if-no-files-found: error

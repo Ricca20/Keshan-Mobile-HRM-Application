@@ -1,31 +1,36 @@
-import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { requireUser } from '@/lib/api-auth'
 import { NextResponse } from 'next/server'
+import type { Prisma } from '@/generated/prisma/client'
+
+function intParam(value: string | null, min: number, max: number): number | undefined | null {
+  if (value === null || value === '') return undefined
+  const n = Number(value)
+  return Number.isInteger(n) && n >= min && n <= max ? n : null
+}
 
 export async function GET(req: Request) {
-  const session = await auth()
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const guard = await requireUser()
+  if (guard.response) return guard.response
+  const { user } = guard
 
   try {
     const { searchParams } = new URL(req.url)
-    const month = searchParams.get('month')
-    const year = searchParams.get('year')
-    const userId = searchParams.get('userId')
-    
-    let where: any = {}
-    
-    if (month) where.month = parseInt(month)
-    if (year) where.year = parseInt(year)
+    const month = intParam(searchParams.get('month'), 1, 12)
+    const year = intParam(searchParams.get('year'), 2000, 2100)
+    if (month === null || year === null) {
+      return NextResponse.json({ error: 'Invalid month or year' }, { status: 400 })
+    }
+
+    const where: Prisma.PaySheetWhereInput = { month, year }
 
     // Employees can only see their own post-finalized paysheets
-    if ((session.user as any).role === 'EMPLOYEE') {
-      where.userId = (session.user as any).id
-      // Include all statuses the employee should be able to see and act on
+    if (user.role === 'EMPLOYEE') {
+      where.userId = user.id
       where.status = { in: ['FINALIZED', 'PAYMENT_CLAIMED', 'ACKNOWLEDGED', 'DISPUTED'] }
-    } else if (userId) {
-      where.userId = userId
+    } else {
+      const userId = searchParams.get('userId')
+      if (userId) where.userId = userId
     }
 
     const paysheets = await prisma.paySheet.findMany({

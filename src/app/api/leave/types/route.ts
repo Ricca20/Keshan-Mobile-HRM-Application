@@ -1,20 +1,12 @@
-import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { syncLeaveBalances } from '@/lib/leave'
+import { requireUser, readJson, prismaErrorCode } from '@/lib/api-auth'
+import { validate, leaveTypeSchema } from '@/lib/validation'
 import { NextResponse } from 'next/server'
-import { z } from 'zod'
 
-const leaveTypeSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  daysAllowed: z.number().min(0, 'Days must be at least 0'),
-  isPaid: z.boolean(),
-})
-
-export async function GET(req: Request) {
-  const session = await auth()
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+export async function GET() {
+  const guard = await requireUser()
+  if (guard.response) return guard.response
 
   try {
     // Both ADMIN and EMPLOYEE need to see leave types
@@ -28,25 +20,15 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const session = await auth()
-  if (!session || (session.user as any).role !== 'ADMIN') {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const guard = await requireUser('ADMIN')
+  if (guard.response) return guard.response
+
+  const validation = validate(leaveTypeSchema, await readJson(req))
+  if (!validation.success) return validation.response
 
   try {
-    const body = await req.json()
-    const validatedData = leaveTypeSchema.parse(body)
-
-    const existing = await prisma.leaveType.findUnique({
-      where: { name: validatedData.name }
-    })
-
-    if (existing) {
-      return NextResponse.json({ error: 'A leave type with this name already exists' }, { status: 400 })
-    }
-
     const leaveType = await prisma.leaveType.create({
-      data: validatedData
+      data: validation.data
     })
 
     // Automatically generate balances for all active employees
@@ -54,8 +36,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json(leaveType)
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.issues[0].message }, { status: 400 })
+    if (prismaErrorCode(error) === 'P2002') {
+      return NextResponse.json({ error: 'A leave type with this name already exists' }, { status: 400 })
     }
     return NextResponse.json({ error: 'Failed to create leave type' }, { status: 500 })
   }

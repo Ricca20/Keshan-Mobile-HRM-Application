@@ -1,117 +1,113 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getToken } from 'next-auth/jwt'
+import { checkRateLimit } from '@/lib/rate-limit'
 
-// Basic memory store for rate limiting (since we don't have Redis)
-const rateLimitMap = new Map<string, { count: number, resetTime: number }>()
-const RATE_LIMIT_WINDOW = 60 * 1000 // 1 minute
-const MAX_REQUESTS = 10 // Max login attempts per minute
+// NOTE: Next 16 deprecates `middleware.ts` in favour of `proxy.ts`. Rename the file
+// and this function to `proxy` when convenient; behaviour is identical.
+
+const AUTH_PAGES = ['/login', '/setup-password', '/reset-password', '/forgot-password']
+
+const ADMIN_ONLY_APIS = [
+  '/api/employees',
+  '/api/shops',
+  '/api/settings',
+  '/api/clock/logs',
+  '/api/paysheets/generate',
+  '/api/paysheets/finalize',
+  '/api/paysheets/export',
+  '/api/paysheets/pay',
+  '/api/paysheets/resolve',
+  '/api/leave/types',
+  '/api/verification/send',
+  '/api/verification/penalize',
+  '/api/admin',
+  '/api/hrms',
+  '/api/ip',
+]
+const EMPLOYEE_ONLY_APIS = [
+  '/api/clock/in',
+  '/api/clock/out',
+  '/api/verification/check',
+  '/api/verification/verify',
+  '/api/paysheets/acknowledge',
+  '/api/paysheets/dispute',
+]
+
+function matches(pathname: string, prefixes: string[]) {
+  return prefixes.some(p => pathname === p || pathname.startsWith(`${p}/`))
+}
+
+function clientIp(req: NextRequest) {
+  return (
+    req.headers.get('x-real-ip') ||
+    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    'unknown'
+  )
+}
 
 export async function middleware(req: NextRequest) {
-  // 1. Rate Limiting for Login & Forgot Password
-  if ((req.nextUrl.pathname === '/login' || req.nextUrl.pathname === '/api/auth/forgot-password') && req.method === 'POST') {
-    const ip = req.headers.get('x-forwarded-for') || '127.0.0.1'
-    const now = Date.now()
+  const { nextUrl } = req
+  const { pathname } = nextUrl
+  const isApi = pathname.startsWith('/api/')
 
-    const limitRecord = rateLimitMap.get(ip)
-    if (limitRecord) {
-      if (now > limitRecord.resetTime) {
-        rateLimitMap.set(ip, { count: 1, resetTime: now + RATE_LIMIT_WINDOW })
-      } else {
-        if (limitRecord.count >= MAX_REQUESTS) {
-          return new NextResponse('Too many requests, please try again later.', { status: 429 })
-        }
-        limitRecord.count++
-      }
-    } else {
-      rateLimitMap.set(ip, { count: 1, resetTime: now + RATE_LIMIT_WINDOW })
+  // 1. Rate limiting for credential endpoints (the real login endpoint is the NextAuth callback)
+  if (req.method === 'POST') {
+    const retryAfter = checkRateLimit(clientIp(req), pathname)
+    if (retryAfter !== null) {
+      return NextResponse.json(
+        { error: 'Too many requests, please try again later.' },
+        { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+      )
     }
   }
 
-  const { nextUrl } = req
+  // 2. Public endpoints: NextAuth itself, password flows, and cron (protected by CRON_SECRET in the handler)
+  if (pathname.startsWith('/api/auth/') || pathname.startsWith('/api/cron/')) {
+    return NextResponse.next()
+  }
+
   const isProduction = process.env.NODE_ENV === 'production'
   const token = await getToken({
     req,
-    secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || '',
+    secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
     secureCookie: isProduction,
     salt: isProduction ? '__Secure-authjs.session-token' : 'authjs.session-token'
   })
 
-  const isLoggedIn = !!token
-  const isAuthRoute = nextUrl.pathname.startsWith('/login') || 
-                      nextUrl.pathname.startsWith('/setup-password') || 
-                      nextUrl.pathname.startsWith('/reset-password') || 
-                      nextUrl.pathname.startsWith('/forgot-password')
-  const isAdminRoute = nextUrl.pathname.startsWith('/admin')
-  const isEmployeeRoute = nextUrl.pathname.startsWith('/employee')
+  const isLoggedIn = !!token && token.error !== 'Deactivated'
+  const isAuthPage = AUTH_PAGES.some(p => pathname.startsWith(p))
+  const isLanding = pathname === '/'
 
-  // Allow static assets, images, and API auth routes
-  if (
-    nextUrl.pathname.startsWith('/api/auth') ||
-    nextUrl.pathname.startsWith('/_next') ||
-    nextUrl.pathname.match(/\.(jpg|jpeg|png|svg|ico|gif|webp)$/i)
-  ) {
-    return NextResponse.next()
+  // 3. Unauthenticated
+  if (!isLoggedIn) {
+    if (isApi) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (isAuthPage || isLanding) return NextResponse.next()
+
+    const loginUrl = new URL('/login', nextUrl)
+    loginUrl.searchParams.set('callbackUrl', pathname + nextUrl.search)
+    return NextResponse.redirect(loginUrl)
   }
 
-  // Redirect unauthenticated users to login (except if already on login page)
-  if (!isLoggedIn && !isAuthRoute) {
-    return NextResponse.redirect(new URL('/login', nextUrl))
+  const home = token.role === 'ADMIN' ? '/admin/dashboard' : '/employee/dashboard'
+
+  // 4. Logged in
+  if (isAuthPage || isLanding) {
+    return NextResponse.redirect(new URL(home, nextUrl))
+  }
+  if (pathname.startsWith('/admin') && token.role !== 'ADMIN') {
+    return NextResponse.redirect(new URL(home, nextUrl))
+  }
+  if (pathname.startsWith('/employee') && token.role !== 'EMPLOYEE') {
+    return NextResponse.redirect(new URL(home, nextUrl))
   }
 
-  // Allow NextAuth routes to pass through (forgot-password is rate limited above)
-  if (nextUrl.pathname.startsWith('/api/auth/callback') || nextUrl.pathname.startsWith('/api/auth/session') || nextUrl.pathname.startsWith('/api/auth/csrf') || nextUrl.pathname.startsWith('/api/auth/providers') || nextUrl.pathname.startsWith('/api/auth/signin') || nextUrl.pathname.startsWith('/api/auth/signout')) {
-    return NextResponse.next()
-  }
-
-  // Handle Logged In Users
-  if (isLoggedIn) {
-    if (isAuthRoute || nextUrl.pathname === '/') {
-      return NextResponse.redirect(new URL(token.role === 'ADMIN' ? '/admin/dashboard' : '/employee/dashboard', nextUrl))
+  if (isApi) {
+    if (matches(pathname, ADMIN_ONLY_APIS) && token.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 })
     }
-
-    if (isAdminRoute && token.role !== 'ADMIN') {
-      return NextResponse.redirect(new URL('/employee/dashboard', nextUrl))
-    }
-
-    if (isEmployeeRoute && token.role !== 'EMPLOYEE') {
-      return NextResponse.redirect(new URL('/admin/dashboard', nextUrl))
-    }
-
-    // Strict API Route Validation
-    if (nextUrl.pathname.startsWith('/api')) {
-      const adminOnlyApis = [
-        '/api/employees',
-        '/api/shops',
-        '/api/paysheets/generate',
-        '/api/paysheets/finalize',
-        '/api/paysheets/export',
-        '/api/paysheets/pay',
-        '/api/paysheets/resolve',
-        '/api/leave/types',
-        '/api/verification/send',
-        '/api/verification/penalize',
-        '/api/admin',
-        '/api/cron',
-        '/api/hrms',
-      ]
-      const employeeOnlyApis = [
-        '/api/clock/in',
-        '/api/clock/out',
-        '/api/verification/check',
-        '/api/paysheets/acknowledge',
-        '/api/paysheets/dispute',
-      ]
-
-      const isAdminApi = adminOnlyApis.some(route => nextUrl.pathname.startsWith(route))
-      const isEmployeeApi = employeeOnlyApis.some(route => nextUrl.pathname.startsWith(route))
-
-      if (isAdminApi && token.role !== 'ADMIN') {
-        return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 })
-      }
-      if (isEmployeeApi && token.role !== 'EMPLOYEE') {
-        return NextResponse.json({ error: 'Forbidden: Employee access required' }, { status: 403 })
-      }
+    if (matches(pathname, EMPLOYEE_ONLY_APIS) && token.role !== 'EMPLOYEE') {
+      return NextResponse.json({ error: 'Forbidden: Employee access required' }, { status: 403 })
     }
   }
 
@@ -120,6 +116,6 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)',
+    '/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|images/|.*\\.(?:jpg|jpeg|png|svg|ico|gif|webp)$).*)',
   ],
 }

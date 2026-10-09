@@ -1,4 +1,6 @@
-import { auth } from '@/lib/auth'
+import { redirect } from 'next/navigation'
+import { getSessionUser } from '@/lib/api-auth'
+import { colomboDateStr, colomboDayRange, dbDate } from '@/lib/time'
 import { prisma } from '@/lib/prisma'
 import {
   Users,
@@ -11,14 +13,16 @@ import {
 import Link from 'next/link'
 
 export default async function AdminDashboard() {
-  const session = await auth()
+  const admin = await getSessionUser('ADMIN')
+  if (!admin) redirect('/login')
 
-  const today = new Date()
-  const startOfDay = new Date(today.setHours(0, 0, 0, 0))
-  const endOfDay = new Date(today.setHours(23, 59, 59, 999))
-  
-  const currentMonth = today.getMonth() + 1
-  const currentYear = today.getFullYear()
+  // "Today" is the Colombo calendar day, regardless of the server's timezone
+  const todayStr = colomboDateStr()
+  const { start: startOfDay, end: endOfDay } = colomboDayRange(todayStr)
+  const todayDate = dbDate(todayStr)
+
+  const currentMonth = Number(todayStr.slice(5, 7))
+  const currentYear = Number(todayStr.slice(0, 4))
 
   // Run all database queries concurrently to avoid waterfall delays
   const [
@@ -67,8 +71,8 @@ export default async function AdminDashboard() {
     prisma.leaveRequest.findMany({
       where: {
         status: 'APPROVED',
-        startDate: { lte: endOfDay },
-        endDate: { gte: startOfDay }
+        startDate: { lte: todayDate },
+        endDate: { gte: todayDate }
       },
       distinct: ['userId']
     }),
@@ -153,7 +157,7 @@ export default async function AdminDashboard() {
       {/* Header */}
       <div>
         <h1 className="text-2xl lg:text-3xl font-bold text-slate-900">
-          Welcome back, {session?.user?.name ?? 'Admin'} 👋
+          Welcome back, {admin.name ?? 'Admin'} 👋
         </h1>
         <p className="text-slate-500 mt-1">
           Here&apos;s what&apos;s happening across your shops today.

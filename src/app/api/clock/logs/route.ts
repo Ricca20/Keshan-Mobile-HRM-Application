@@ -1,23 +1,21 @@
-import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { requireUser } from '@/lib/api-auth'
+import { colomboDayRange, isDateStr } from '@/lib/time'
 import { NextResponse } from 'next/server'
+import type { Prisma } from '@/generated/prisma/client'
 
 export async function GET(req: Request) {
-  const session = await auth()
-  if (!session || (session.user as any).role !== 'ADMIN') {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const guard = await requireUser('ADMIN')
+  if (guard.response) return guard.response
 
   try {
     const { searchParams } = new URL(req.url)
-    const dateStr = searchParams.get('date') // YYYY-MM-DD
-    
-    let where: any = {}
+    const dateStr = searchParams.get('date') // YYYY-MM-DD (Colombo)
+
+    const where: Prisma.ClockLogWhereInput = {}
     if (dateStr) {
-      const start = new Date(dateStr)
-      start.setHours(0, 0, 0, 0)
-      const end = new Date(dateStr)
-      end.setHours(23, 59, 59, 999)
+      if (!isDateStr(dateStr)) return NextResponse.json({ error: 'Invalid date' }, { status: 400 })
+      const { start, end } = colomboDayRange(dateStr)
       where.timestamp = { gte: start, lte: end }
     }
 
@@ -30,7 +28,7 @@ export async function GET(req: Request) {
       orderBy: { timestamp: 'desc' },
       take: 100 // Limit to recent 100 logs for performance
     })
-    
+
     return NextResponse.json(logs)
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch clock logs' }, { status: 500 })

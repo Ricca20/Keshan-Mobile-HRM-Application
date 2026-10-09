@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 
 type ExportablePaysheet = {
   user: {
@@ -14,43 +14,50 @@ type ExportablePaysheet = {
   unpaidDays: number
   deductions: number
   bonuses: number
+  otPay: number
   netPay: number
   status: string
 }
 
-export function generatePaysheetExcel(paysheets: ExportablePaysheet[]): Buffer {
-  const rows = paysheets.map(p => ({
-    'Employee': p.user.name,
-    'Shop': p.user.shop?.name || 'Unassigned',
-    'Month': `${p.month}/${p.year}`,
-    'Base Salary': p.baseSalary.toFixed(2),
-    'Paid Days': p.paidDays,
-    'Unpaid Days': p.unpaidDays,
-    'Deductions': p.deductions.toFixed(2),
-    'Bonuses': p.bonuses.toFixed(2),
-    'Net Pay': p.netPay.toFixed(2),
-    'Status': p.status,
-  }))
+/** Prevents spreadsheet formula injection from user-controlled text. */
+function safeText(value: string): string {
+  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value
+}
 
-  const ws = XLSX.utils.json_to_sheet(rows)
-  
-  // Basic column width formatting
-  ws['!cols'] = [
-    { wch: 25 }, // Employee
-    { wch: 25 }, // Shop
-    { wch: 10 }, // Month
-    { wch: 15 }, // Base Salary
-    { wch: 10 }, // Paid Days
-    { wch: 12 }, // Unpaid Days
-    { wch: 15 }, // Deductions
-    { wch: 15 }, // Bonuses
-    { wch: 15 }, // Net Pay
-    { wch: 12 }, // Status
+export async function generatePaysheetExcel(paysheets: ExportablePaysheet[]): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook()
+  const ws = wb.addWorksheet('Paysheet')
+
+  ws.columns = [
+    { header: 'Employee', key: 'employee', width: 25 },
+    { header: 'Shop', key: 'shop', width: 25 },
+    { header: 'Month', key: 'month', width: 10 },
+    { header: 'Base Salary', key: 'baseSalary', width: 15, style: { numFmt: '#,##0.00' } },
+    { header: 'Paid Days', key: 'paidDays', width: 10 },
+    { header: 'Unpaid Days', key: 'unpaidDays', width: 12 },
+    { header: 'OT Pay', key: 'otPay', width: 15, style: { numFmt: '#,##0.00' } },
+    { header: 'Deductions', key: 'deductions', width: 15, style: { numFmt: '#,##0.00' } },
+    { header: 'Bonuses', key: 'bonuses', width: 15, style: { numFmt: '#,##0.00' } },
+    { header: 'Net Pay', key: 'netPay', width: 15, style: { numFmt: '#,##0.00' } },
+    { header: 'Status', key: 'status', width: 16 },
   ]
+  ws.getRow(1).font = { bold: true }
 
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Paysheet')
-  
-  // Generate buffer
-  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+  for (const p of paysheets) {
+    ws.addRow({
+      employee: safeText(p.user.name),
+      shop: safeText(p.user.shop?.name || 'Unassigned'),
+      month: `${p.month}/${p.year}`,
+      baseSalary: p.baseSalary,
+      paidDays: p.paidDays,
+      unpaidDays: p.unpaidDays,
+      otPay: p.otPay,
+      deductions: p.deductions,
+      bonuses: p.bonuses,
+      netPay: p.netPay,
+      status: p.status,
+    })
+  }
+
+  return Buffer.from(await wb.xlsx.writeBuffer())
 }

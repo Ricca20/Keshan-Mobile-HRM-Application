@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { auth } from '@/lib/auth'
+import { requireUser } from '@/lib/api-auth'
 import { PaySheetStatus } from '@/generated/prisma/client'
 
 /**
@@ -12,37 +12,25 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = await requireUser('ADMIN')
+  if (guard.response) return guard.response
+
   try {
     const { id } = await params
-    const session = await auth()
-    if ((session?.user as any)?.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
 
-    const paysheet = await prisma.paySheet.findUnique({
-      where: { id },
-      select: { status: true }
-    })
-
-    if (!paysheet) {
-      return NextResponse.json({ error: 'Paysheet not found' }, { status: 404 })
-    }
-
-    if (paysheet.status !== PaySheetStatus.DISPUTED) {
-      return NextResponse.json({ error: 'Only disputed paysheets can be resolved' }, { status: 400 })
-    }
-
-    // Re-issue: move back to PAYMENT_CLAIMED, clearing the dispute reason
-    const updated = await prisma.paySheet.update({
-      where: { id },
+    const updated = await prisma.paySheet.updateMany({
+      where: { id, status: PaySheetStatus.DISPUTED },
       data: {
         status: PaySheetStatus.PAYMENT_CLAIMED,
         disputeReason: null,
         paidAt: new Date(), // refresh timestamp
       }
     })
+    if (updated.count === 0) {
+      return NextResponse.json({ error: 'Only disputed paysheets can be resolved' }, { status: 400 })
+    }
 
-    return NextResponse.json(updated)
+    return NextResponse.json(await prisma.paySheet.findUnique({ where: { id } }))
   } catch (error) {
     console.error('Error resolving dispute:', error)
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })

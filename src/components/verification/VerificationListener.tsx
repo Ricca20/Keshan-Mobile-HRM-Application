@@ -13,6 +13,8 @@ export function VerificationListener() {
   const [pending, setPending] = useState<PendingVerification | null>(null)
   const [timeLeft, setTimeLeft] = useState<number>(0)
   const [status, setStatus] = useState<'IDLE' | 'VERIFYING' | 'SUCCESS' | 'MISSED'>('IDLE')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -64,18 +66,34 @@ export function VerificationListener() {
     return () => clearInterval(timer)
   }, [pending, status])
 
-  const handleVerify = () => {
-    if (!pending) return
-    // Since the actual verify endpoint is a Next.js page we built for email clicks, 
-    // we can just route them to it, or we can hit the API directly.
-    // Let's route them to the page for consistency.
-    setStatus('SUCCESS')
-    router.push(`/verify/${pending.id}`)
-    
+  const handleVerify = async () => {
+    if (!pending || submitting) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/verification/verify/${encodeURIComponent(pending.id)}`, { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) {
+        setStatus('SUCCESS')
+      } else if (res.status === 410) {
+        setStatus('MISSED')
+      } else {
+        // e.g. not on shop WiFi: keep the prompt open so they can retry within the window
+        setError(data.error || 'Verification failed. Please try again.')
+        return
+      }
+    } catch {
+      setError('Network error. Please try again.')
+      return
+    } finally {
+      setSubmitting(false)
+    }
+
     // Clear after a moment
     setTimeout(() => {
       setPending(null)
       setStatus('IDLE')
+      router.refresh()
     }, 2000)
   }
 
@@ -104,9 +122,14 @@ export function VerificationListener() {
               <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-2">Time Remaining</p>
             </div>
 
+            {error && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl p-3 mb-4">{error}</p>
+            )}
+
             <button
               onClick={handleVerify}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xl py-5 rounded-2xl shadow-xl shadow-blue-600/30 transition-all hover:scale-[1.02] active:scale-95"
+              disabled={submitting}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xl py-5 rounded-2xl shadow-xl shadow-blue-600/30 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-60"
             >
               I AM WORKING
             </button>

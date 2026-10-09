@@ -8,6 +8,16 @@ const transporter = nodemailer.createTransport({
   },
 })
 
+/** Escapes untrusted values before interpolating them into email HTML. */
+export function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 export async function sendNotificationEmail({
   to,
   subject,
@@ -26,7 +36,7 @@ export async function sendNotificationEmail({
     await transporter.sendMail({
       from: `"PhoneShop HRM" <${process.env.EMAIL_USER}>`,
       to,
-      subject,
+      subject: subject.replace(/[\r\n]+/g, ' '),
       html,
     })
   } catch (error) {

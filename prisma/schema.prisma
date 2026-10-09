@@ -23,6 +23,11 @@ model User {
   address       String?
   penaltyPoints Int      @default(0)
 
+  // Security
+  passwordChangedAt   DateTime? // sessions issued before this are rejected
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+
   shopId           String?
   shop             Shop?              @relation(fields: [shopId], references: [id])
   clockLogs        ClockLog[]

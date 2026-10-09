@@ -4,6 +4,7 @@ import { Clock, Calendar, TreePalm, Receipt, ArrowRight, Sparkles, MapPin } from
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { formatCurrency } from '@/lib/utils'
+import { AUTO_CLOSED_REASON } from '@/lib/clock'
 
 export default async function EmployeeDashboard() {
   const session = await auth()
@@ -13,7 +14,7 @@ export default async function EmployeeDashboard() {
 
   // 1. Current Clock Status
   const lastLog = await prisma.clockLog.findFirst({
-    where: { userId, isValid: true },
+    where: { userId, OR: [{ isValid: true }, { flagReason: AUTO_CLOSED_REASON }] },
     orderBy: { timestamp: 'desc' },
     include: { shop: true }
   })
@@ -27,6 +28,7 @@ export default async function EmployeeDashboard() {
     where: {
       userId,
       type: 'IN',
+      isValid: true,
       timestamp: { gte: sevenDaysAgo }
     }
   })
@@ -46,7 +48,7 @@ export default async function EmployeeDashboard() {
 
   // 4. Latest Paysheet
   const latestPaysheet = await prisma.paySheet.findFirst({
-    where: { userId, status: 'FINALIZED' },
+    where: { userId, status: { in: ['FINALIZED', 'PAYMENT_CLAIMED', 'ACKNOWLEDGED', 'DISPUTED'] } },
     orderBy: [{ year: 'desc' }, { month: 'desc' }]
   })
 

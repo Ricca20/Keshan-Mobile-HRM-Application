@@ -1,20 +1,15 @@
-import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { requireUser, readJson } from '@/lib/api-auth'
+import { validate, paysheetUpdateSchema } from '@/lib/validation'
+import { calculateNetPay } from '@/lib/paysheet'
 import { NextResponse } from 'next/server'
-import { z } from 'zod'
 
-const updateSchema = z.object({
-  bonuses: z.number().min(0).optional(),
-  deductions: z.number().min(0).optional(),
-  bonusNote: z.string().optional(),
-  deductionNote: z.string().optional(),
-})
+const EMPLOYEE_VISIBLE = ['FINALIZED', 'PAYMENT_CLAIMED', 'ACKNOWLEDGED', 'DISPUTED']
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth()
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const guard = await requireUser()
+  if (guard.response) return guard.response
+  const { user } = guard
 
   try {
     const { id } = await params
@@ -25,19 +20,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       }
     })
 
-    if (!paysheet) {
-      return NextResponse.json({ error: 'Paysheet not found' }, { status: 404 })
-    }
-
     // Employees can only access their own paysheets in any post-finalized state
-    if ((session.user as any).role === 'EMPLOYEE') {
-      const allowedStatuses = ['FINALIZED', 'PAYMENT_CLAIMED', 'ACKNOWLEDGED', 'DISPUTED']
-      if (
-        paysheet.userId !== (session.user as any).id ||
-        !allowedStatuses.includes(paysheet.status)
-      ) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-      }
+    if (
+      !paysheet ||
+      (user.role === 'EMPLOYEE' && (paysheet.userId !== user.id || !EMPLOYEE_VISIBLE.includes(paysheet.status)))
+    ) {
+      return NextResponse.json({ error: 'Paysheet not found' }, { status: 404 })
     }
 
     return NextResponse.json(paysheet)
@@ -47,49 +35,47 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 }
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth()
-  if (!session || (session.user as any).role !== 'ADMIN') {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const guard = await requireUser('ADMIN')
+  if (guard.response) return guard.response
+
+  const validation = validate(paysheetUpdateSchema, await readJson(req))
+  if (!validation.success) return validation.response
+  const changes = validation.data
 
   try {
     const { id } = await params
-    const body = await req.json()
-    const validatedData = updateSchema.parse(body)
 
     const paysheet = await prisma.paySheet.findUnique({ where: { id } })
     if (!paysheet) {
       return NextResponse.json({ error: 'Paysheet not found' }, { status: 404 })
     }
 
-    if (paysheet.status === 'FINALIZED') {
-      return NextResponse.json({ error: 'Cannot edit a finalized paysheet' }, { status: 400 })
+    const bonuses = changes.bonuses ?? paysheet.bonuses
+    const deductions = changes.deductions ?? paysheet.deductions
+
+    // Only DRAFT paysheets are editable; the status condition makes this atomic
+    const updated = await prisma.paySheet.updateMany({
+      where: { id, status: 'DRAFT' },
+      data: {
+        bonuses,
+        deductions,
+        bonusNote: changes.bonusNote ?? paysheet.bonusNote,
+        deductionNote: changes.deductionNote ?? paysheet.deductionNote,
+        netPay: calculateNetPay(paysheet.baseSalary, paysheet.otPay, deductions, bonuses),
+      },
+    })
+    if (updated.count === 0) {
+      return NextResponse.json({ error: 'Only draft paysheets can be edited' }, { status: 400 })
     }
 
-    // Recalculate net pay
-    const newBonuses = validatedData.bonuses ?? paysheet.bonuses
-    const newDeductions = validatedData.deductions ?? paysheet.deductions
-    const newNetPay = paysheet.baseSalary + paysheet.otPay - newDeductions + newBonuses
-
-    const updated = await prisma.paySheet.update({
+    const result = await prisma.paySheet.findUnique({
       where: { id },
-      data: {
-        bonuses: newBonuses,
-        deductions: newDeductions,
-        bonusNote: validatedData.bonusNote ?? paysheet.bonusNote,
-        deductionNote: validatedData.deductionNote ?? paysheet.deductionNote,
-        netPay: newNetPay
-      },
       include: {
         user: { select: { name: true, shop: { select: { name: true } } } }
       }
     })
-
-    return NextResponse.json(updated)
+    return NextResponse.json(result)
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.issues[0].message }, { status: 400 })
-    }
     return NextResponse.json({ error: 'Failed to update paysheet' }, { status: 500 })
   }
 }

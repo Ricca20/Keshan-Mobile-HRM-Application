@@ -44,12 +44,14 @@ export default function LoginPage() {
       })
 
       if (res?.error) {
-        console.error('Login Error:', res.error)
-        setError(`Login failed: ${res.error}`)
-        toast.error('Password wrong')
+        setError('Invalid email or password.')
+        toast.error('Login failed')
       } else {
         toast.success('Login success')
-        router.push('/')
+        // Only follow same-origin relative paths (no open redirect)
+        const callbackUrl = new URLSearchParams(window.location.search).get('callbackUrl')
+        const safe = callbackUrl && callbackUrl.startsWith('/') && !callbackUrl.startsWith('//') && !callbackUrl.includes('\\')
+        router.push(safe ? callbackUrl : '/')
         router.refresh()
       }
     } catch {

@@ -1,74 +1,69 @@
-import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { requireUser, readJson } from '@/lib/api-auth'
+import { validate } from '@/lib/validation'
+import { processDailyAttendance } from '@/lib/attendance'
+import { getSettings } from '@/lib/settings'
+import { colomboDateStr, colomboTime, dbDateStr, eachDateStr } from '@/lib/time'
+import { escapeHtml, sendNotificationEmail } from '@/lib/mail'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
 const reviewSchema = z.object({
   status: z.enum(['APPROVED', 'REJECTED']),
-  approverNote: z.string().optional(),
+  approverNote: z.string().trim().max(1000).optional(),
 })
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth()
-  if (!session || (session.user as any).role !== 'ADMIN') {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const guard = await requireUser('ADMIN')
+  if (guard.response) return guard.response
+
+  const validation = validate(reviewSchema, await readJson(req))
+  if (!validation.success) return validation.response
+  const { status, approverNote } = validation.data
 
   try {
     const { id } = await params
-    const body = await req.json()
-    const validatedData = reviewSchema.parse(body)
 
-    const leaveRequest = await prisma.leaveRequest.findUnique({
-      where: { id }
-    })
-
-    if (!leaveRequest) {
+    const existing = await prisma.leaveRequest.findUnique({ where: { id } })
+    if (!existing) {
       return NextResponse.json({ error: 'Leave request not found' }, { status: 404 })
     }
+    if (existing.status === status) {
+      return NextResponse.json({ error: `Leave request is already ${status.toLowerCase()}` }, { status: 400 })
+    }
 
-    const currentYear = leaveRequest.startDate.getFullYear()
+    const year = existing.startDate.getUTCFullYear()
 
-    // Transaction to safely update request and balance together
     const result = await prisma.$transaction(async (tx) => {
-      // 1. If currently PENDING and moving to APPROVED: Increment usedDays
-      // 2. If currently APPROVED and moving to REJECTED: Decrement usedDays
-      
-      if (leaveRequest.status === 'PENDING' && validatedData.status === 'APPROVED') {
-        await tx.leaveBalance.update({
-          where: {
-            userId_leaveTypeId_year: {
-              userId: leaveRequest.userId,
-              leaveTypeId: leaveRequest.leaveTypeId,
-              year: currentYear
-            }
-          },
-          data: {
-            usedDays: { increment: leaveRequest.totalDays }
-          }
-        })
-      } else if (leaveRequest.status === 'APPROVED' && validatedData.status === 'REJECTED') {
-        await tx.leaveBalance.update({
-          where: {
-            userId_leaveTypeId_year: {
-              userId: leaveRequest.userId,
-              leaveTypeId: leaveRequest.leaveTypeId,
-              year: currentYear
-            }
-          },
-          data: {
-            usedDays: { decrement: leaveRequest.totalDays }
-          }
-        })
+      // Same lock as leave creation, so balance changes for this employee are serialized
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`leave:${existing.userId}`}))`
+
+      // Re-read under the lock; the previous status decides how the balance moves
+      const current = await tx.leaveRequest.findUniqueOrThrow({ where: { id } })
+      if (current.status === status) return { error: `Leave request is already ${status.toLowerCase()}` }
+
+      const balanceKey = {
+        userId_leaveTypeId_year: { userId: current.userId, leaveTypeId: current.leaveTypeId, year }
       }
 
-      // Update the request
+      if (status === 'APPROVED') {
+        const balance = await tx.leaveBalance.findUnique({ where: balanceKey })
+        if (!balance) return { error: 'Employee has no leave balance for this type and year' }
+        if (balance.usedDays + current.totalDays > balance.totalDays) {
+          return { error: `Insufficient balance: ${balance.totalDays - balance.usedDays} day(s) remaining, ${current.totalDays} requested` }
+        }
+        await tx.leaveBalance.update({ where: balanceKey, data: { usedDays: { increment: current.totalDays } } })
+      } else if (current.status === 'APPROVED') {
+        // APPROVED -> REJECTED: give the days back
+        await tx.leaveBalance.update({ where: balanceKey, data: { usedDays: { decrement: current.totalDays } } })
+      }
+
       const updatedRequest = await tx.leaveRequest.update({
         where: { id },
         data: {
-          status: validatedData.status,
-          approverNote: validatedData.approverNote,
-          approvedBy: (session.user as any).id,
+          status,
+          approverNote,
+          approvedBy: guard.user.id,
           reviewedAt: new Date()
         },
         include: {
@@ -76,43 +71,47 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
           leaveType: { select: { name: true } }
         }
       })
-
-      return updatedRequest
+      return { updatedRequest }
     })
 
-    // Notify Employee
-    if (result && result.user) {
-      const { sendNotificationEmail } = await import('@/lib/mail')
-      
-      const type = validatedData.status === 'APPROVED' ? 'LEAVE_APPROVED' : 'LEAVE_REJECTED'
-      const title = `Leave Request ${validatedData.status === 'APPROVED' ? 'Approved' : 'Rejected'}`
-      
-      // In-app Notification
-      await prisma.notification.create({
-        data: {
-          userId: result.userId,
-          title,
-          message: `Your leave request for ${result.totalDays} day(s) of ${result.leaveType.name} has been ${validatedData.status.toLowerCase()}.`,
-          type
-        }
-      })
-      
-      // Email Notification
-      await sendNotificationEmail({
-        to: result.user.email,
-        subject: `${title} - PhoneShop HRM`,
-        html: `<p>Hello <strong>${result.user.name}</strong>,</p>
-               <p>Your leave request for ${result.totalDays} day(s) of ${result.leaveType.name} has been <strong>${validatedData.status}</strong>.</p>
-               ${validatedData.approverNote ? `<p><strong>Note:</strong> ${validatedData.approverNote}</p>` : ''}
-               <p>Please log in to the HRM system for more details.</p>`
-      })
+    if ('error' in result) {
+      return NextResponse.json({ error: result.error }, { status: 400 })
+    }
+    const updated = result.updatedRequest
+
+    // Recompute attendance for days already past so LEAVE/ABSENT reflects the decision
+    const today = colomboDateStr()
+    const settings = await getSettings()
+    for (const day of eachDateStr(dbDateStr(updated.startDate), dbDateStr(updated.endDate))) {
+      if (day >= today) break
+      await processDailyAttendance(updated.userId, colomboTime(day, '12:00'), settings)
+        .catch(err => console.error('Attendance reprocess failed:', err))
     }
 
-    return NextResponse.json(result)
+    const type = status === 'APPROVED' ? 'LEAVE_APPROVED' : 'LEAVE_REJECTED'
+    const title = `Leave Request ${status === 'APPROVED' ? 'Approved' : 'Rejected'}`
+
+    await prisma.notification.create({
+      data: {
+        userId: updated.userId,
+        title,
+        message: `Your leave request for ${updated.totalDays} day(s) of ${updated.leaveType.name} has been ${status.toLowerCase()}.`,
+        type
+      }
+    })
+
+    await sendNotificationEmail({
+      to: updated.user.email,
+      subject: `${title} - PhoneShop HRM`,
+      html: `<p>Hello <strong>${escapeHtml(updated.user.name)}</strong>,</p>
+             <p>Your leave request for ${updated.totalDays} day(s) of ${escapeHtml(updated.leaveType.name)} has been <strong>${status}</strong>.</p>
+             ${approverNote ? `<p><strong>Note:</strong> ${escapeHtml(approverNote)}</p>` : ''}
+             <p>Please log in to the HRM system for more details.</p>`
+    })
+
+    return NextResponse.json(updated)
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.issues[0].message }, { status: 400 })
-    }
+    console.error('Review leave request error:', error)
     return NextResponse.json({ error: 'Failed to review leave request' }, { status: 500 })
   }
 }

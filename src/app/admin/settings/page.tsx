@@ -26,6 +26,7 @@ export default function AdminSettingsPage() {
   const [maxLateMinsForHalfDay, setMaxLateMinsForHalfDay] = useState('60')
   const [minHoursForFullDay, setMinHoursForFullDay] = useState('4')
   const [otRatePerHour, setOtRatePerHour] = useState('1000')
+  const [weeklyOffDays, setWeeklyOffDays] = useState<number[]>([0, 6])
 
   const { data: settings, isLoading } = useQuery({
     queryKey: ['settings'],
@@ -47,6 +48,12 @@ export default function AdminSettingsPage() {
       if (settings.MAX_LATE_MINS_FOR_HALF_DAY) setMaxLateMinsForHalfDay(settings.MAX_LATE_MINS_FOR_HALF_DAY)
       if (settings.MIN_HOURS_FOR_FULL_DAY) setMinHoursForFullDay(settings.MIN_HOURS_FOR_FULL_DAY)
       if (settings.OT_RATE_PER_HOUR) setOtRatePerHour(settings.OT_RATE_PER_HOUR)
+      if (typeof settings.WEEKLY_OFF_DAYS === 'string') {
+        setWeeklyOffDays(settings.WEEKLY_OFF_DAYS.split(',').filter(Boolean).map(Number))
+      }
+      if (typeof settings.WEEKLY_OFF_DAYS === 'string') {
+        setWeeklyOffDays(settings.WEEKLY_OFF_DAYS.split(',').filter(Boolean).map(Number))
+      }
     }
   }, [settings])
 
@@ -64,10 +71,14 @@ export default function AdminSettingsPage() {
           LATE_PENALTY_AMOUNT: latePenaltyAmount,
           MAX_LATE_MINS_FOR_HALF_DAY: maxLateMinsForHalfDay,
           MIN_HOURS_FOR_FULL_DAY: minHoursForFullDay,
-          OT_RATE_PER_HOUR: otRatePerHour
+          OT_RATE_PER_HOUR: otRatePerHour,
+          WEEKLY_OFF_DAYS: [...weeklyOffDays].sort().join(','),
         })
       })
-      if (!res.ok) throw new Error('Failed to save settings')
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to save settings')
+      }
       return res.json()
     },
     onSuccess: () => {
@@ -124,6 +135,26 @@ export default function AdminSettingsPage() {
                   value={shiftEndTime}
                   onChange={(e) => setShiftEndTime(e.target.value)}
                 />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-slate-700 mb-2">Weekly Off Days</p>
+                <div className="flex flex-wrap gap-2">
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((label, day) => {
+                    const checked = weeklyOffDays.includes(day)
+                    return (
+                      <label key={day} className={`px-3 py-1.5 rounded-lg border text-sm cursor-pointer select-none ${checked ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-semibold' : 'border-slate-200 text-slate-600'}`}>
+                        <input
+                          type="checkbox"
+                          className="sr-only"
+                          checked={checked}
+                          onChange={() => setWeeklyOffDays(checked ? weeklyOffDays.filter(d => d !== day) : [...weeklyOffDays, day])}
+                        />
+                        {label}
+                      </label>
+                    )
+                  })}
+                </div>
+                <p className="text-xs text-slate-500 mt-2">Days without clock-in on these days are not counted as absent, and are skipped when counting leave days.</p>
               </div>
             </div>
 

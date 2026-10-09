@@ -20,6 +20,7 @@ declare module 'next-auth/jwt' {
   interface JWT {
     role: 'ADMIN' | 'EMPLOYEE'
     shopId: string | null
+    authTime?: number
     error?: string
   }
 }

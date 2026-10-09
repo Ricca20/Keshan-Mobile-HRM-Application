@@ -2,13 +2,40 @@ import { PrismaClient } from '../src/generated/prisma/client'
 import { Pool } from 'pg'
 import { PrismaPg } from '@prisma/adapter-pg'
 import bcrypt from 'bcryptjs'
+import { randomBytes } from 'crypto'
 
 const connectionString = process.env.DATABASE_URL
 const pool = new Pool({ connectionString })
 const adapter = new PrismaPg(pool)
 const prisma = new PrismaClient({ adapter })
 
+/**
+ * DEVELOPMENT ONLY. Wipes every table and inserts demo data.
+ *
+ * Required environment:
+ *   SEED_CONFIRM=wipe-all-data      explicit confirmation (the seed deletes everything)
+ *   SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD
+ * Optional:
+ *   SEED_EMPLOYEE_PASSWORD          defaults to a random password printed at the end
+ */
+function requireEnv(name: string): string {
+  const value = process.env[name]
+  if (!value) throw new Error(`${name} must be set to run the seed`)
+  return value
+}
+
 async function main() {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Refusing to seed: NODE_ENV is production')
+  }
+  if (process.env.SEED_CONFIRM !== 'wipe-all-data') {
+    throw new Error('Refusing to seed: this deletes ALL data. Set SEED_CONFIRM=wipe-all-data to proceed.')
+  }
+  const adminEmail = requireEnv('SEED_ADMIN_EMAIL').toLowerCase()
+  const adminPlainPassword = requireEnv('SEED_ADMIN_PASSWORD')
+  const employeePlainPassword =
+    process.env.SEED_EMPLOYEE_PASSWORD || `Emp-${randomBytes(9).toString('base64url')}1`
+
   console.log('🌱 Starting comprehensive database seed...')
 
   // 1. Wipe existing data to prevent unique constraint errors
@@ -49,12 +76,12 @@ async function main() {
 
   // 4. Create 5 Users (1 Admin, 4 Employees)
   console.log('👥 Creating 5 Users...')
-  const adminPassword = await bcrypt.hash('changeme123', 12)
-  const empPassword = await bcrypt.hash('employee123', 12)
+  const adminPassword = await bcrypt.hash(adminPlainPassword, 12)
+  const empPassword = await bcrypt.hash(employeePlainPassword, 12)
 
   const admin = await prisma.user.create({
     data: {
-      name: 'Shop Owner', email: 'kethminakeshan89@gmail.com', password: adminPassword,
+      name: 'Shop Owner', email: adminEmail, password: adminPassword,
       role: 'ADMIN', salary: 0, shopId: shops[0].id,
     }
   })
@@ -188,26 +215,15 @@ async function main() {
     await prisma.workVerification.create({ data: v })
   }
 
-  // 12. Create Password Reset Tokens (5 rows)
-  console.log('🔑 Creating Password Reset Tokens...')
-  const resetTokensData = [
-    { email: employees[0].email, token: 'token-123', expiresAt: new Date(Date.now() + 3600000) },
-    { email: employees[1].email, token: 'token-456', expiresAt: new Date(Date.now() - 3600000) }, // Expired
-    { email: employees[2].email, token: 'token-789', expiresAt: new Date(Date.now() + 3600000) },
-    { email: admin.email, token: 'token-abc', expiresAt: new Date(Date.now() + 3600000) },
-    { email: employees[3].email, token: 'token-xyz', expiresAt: new Date(Date.now() - 86400000) }, // Expired
-  ]
-  for (const t of resetTokensData) {
-    await prisma.passwordResetToken.create({ data: t })
-  }
-
   console.log('\n🎉 Comprehensive Seed Complete!')
   console.log('\n📋 Login credentials:')
-  console.log('   Admin: kethminakeshan89@gmail.com / changeme123')
-  console.log('   Employee: john@phoneshop.lk / employee123')
-  console.log('   Employee: jane@phoneshop.lk / employee123')
+  console.log(`   Admin: ${adminEmail} / (SEED_ADMIN_PASSWORD)`)
+  console.log(`   Employees (john@, jane@, kamal@, nimali@phoneshop.lk): ${employeePlainPassword}`)
 }
 
 main()
-  .catch(console.error)
+  .catch((e) => {
+    console.error(e)
+    process.exitCode = 1
+  })
   .finally(() => prisma.$disconnect())

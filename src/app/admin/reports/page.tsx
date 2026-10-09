@@ -1,9 +1,11 @@
-import { auth } from '@/lib/auth'
+import { redirect } from 'next/navigation'
+import { getSessionUser } from '@/lib/api-auth'
+import { addDays, colomboDateStr, colomboDayRange, dbDate } from '@/lib/time'
 import { prisma } from '@/lib/prisma'
 import { ReportClient } from './report-client'
 
 export default async function AdminReportsPage() {
-  const session = await auth()
+  if (!(await getSessionUser('ADMIN'))) redirect('/login')
 
   // 1. Get active employees for attendance tracking
   const employees = await prisma.user.findMany({
@@ -14,19 +16,15 @@ export default async function AdminReportsPage() {
   const employeeNames = employees.map(e => e.name)
 
   // 2. Attendance Trends (Last 7 Days)
-  const today = new Date()
-  const days = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(today)
-    d.setDate(d.getDate() - i)
-    return d
-  }).reverse()
+  const todayStr = colomboDateStr()
+  const days = Array.from({ length: 7 }, (_, i) => addDays(todayStr, -i)).reverse()
 
   const attendanceStats = await Promise.all(days.map(async (day) => {
-    const startOfDay = new Date(day.setHours(0, 0, 0, 0))
-    const endOfDay = new Date(day.setHours(23, 59, 59, 999))
+    const { start: startOfDay, end: endOfDay } = colomboDayRange(day)
     
     const logs = await prisma.clockLog.findMany({
       where: {
+        isValid: true,
         timestamp: { gte: startOfDay, lte: endOfDay }
       },
       orderBy: { timestamp: 'asc' },
@@ -56,7 +54,7 @@ export default async function AdminReportsPage() {
     }
 
     const statObj: any = {
-      date: startOfDay.toLocaleDateString('en-US', { weekday: 'short' }),
+      date: dbDate(day).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }),
     }
 
     employees.forEach(emp => {

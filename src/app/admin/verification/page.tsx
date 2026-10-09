@@ -1,11 +1,15 @@
-import { auth } from '@/lib/auth'
+import { getSessionUser } from '@/lib/api-auth'
+import { AUTO_CLOSED_REASON } from '@/lib/clock'
+import { expireVerifications } from '@/lib/verification'
 import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 import { VerificationClient } from './verification-client'
 
 export default async function VerificationPage() {
-  const session = await auth()
-  if (!session || (session.user as any).role !== 'ADMIN') redirect('/login')
+  if (!(await getSessionUser('ADMIN'))) redirect('/login')
+
+  // Process verifications that expired since the last sweep so the list is current
+  await expireVerifications()
 
   // Get currently clocked-in users
   const users = await prisma.user.findMany({
@@ -15,7 +19,11 @@ export default async function VerificationPage() {
       name: true, 
       email: true, 
       penaltyPoints: true,
-      clockLogs: { orderBy: { timestamp: 'desc' }, take: 1 } 
+      clockLogs: {
+        where: { OR: [{ isValid: true }, { flagReason: AUTO_CLOSED_REASON }] },
+        orderBy: { timestamp: 'desc' },
+        take: 1,
+      },
     }
   })
 

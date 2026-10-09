@@ -1,66 +1,51 @@
 import { prisma } from './prisma'
+import { dayOfWeek, eachDateStr } from './time'
 
 /**
- * Calculates the total number of leave days between two dates.
- * Since this is a retail phone shop, we include weekends.
- * @param startDate Start date of the leave
- * @param endDate End date of the leave
- * @returns Total number of days
+ * Counts leave days between two calendar dates (inclusive), skipping the shop's
+ * weekly off days (WEEKLY_OFF_DAYS setting).
  */
-export function calculateLeaveDays(startDate: Date, endDate: Date): number {
-  let count = 0
-  const curDate = new Date(startDate.getTime())
-  
-  while (curDate <= endDate) {
-    const dayOfWeek = curDate.getDay()
-    // Skip Sundays (0) and Saturdays (6)
-    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-      count++
-    }
-    curDate.setDate(curDate.getDate() + 1)
-  }
-  
-  return count
+export function calculateLeaveDays(startStr: string, endStr: string, offDays: number[]): number {
+  return eachDateStr(startStr, endStr).filter(d => !offDays.includes(dayOfWeek(d))).length
 }
 
 /**
- * Syncs LeaveBalance records for all active employees for a given leave type.
- * Used when a new LeaveType is created or when needing to ensure everyone has a balance.
- * @param leaveTypeId ID of the LeaveType
- * @param daysAllowed Number of days allowed per year
+ * Ensures every active employee has a LeaveBalance for the given leave type this year.
+ * Existing balances are left untouched.
  */
 export async function syncLeaveBalances(leaveTypeId: string, daysAllowed: number) {
   const currentYear = new Date().getFullYear()
 
-  // Get all active employees
   const employees = await prisma.user.findMany({
     where: { isActive: true, role: 'EMPLOYEE' },
     select: { id: true }
   })
 
-  // Upsert a LeaveBalance for each employee for the current year
-  for (const emp of employees) {
-    await prisma.leaveBalance.upsert({
-      where: {
-        userId_leaveTypeId_year: {
-          userId: emp.id,
-          leaveTypeId,
-          year: currentYear
-        }
-      },
-      create: {
-        userId: emp.id,
-        leaveTypeId,
-        year: currentYear,
-        totalDays: daysAllowed,
-        usedDays: 0
-      },
-      update: {
-        // We do not change usedDays or totalDays on sync, 
-        // to avoid overwriting existing data. 
-        // If daysAllowed changes, we might want to update totalDays, 
-        // but for now we'll just ensure the record exists.
-      }
-    })
-  }
+  await prisma.leaveBalance.createMany({
+    data: employees.map(emp => ({
+      userId: emp.id,
+      leaveTypeId,
+      year: currentYear,
+      totalDays: daysAllowed,
+      usedDays: 0,
+    })),
+    skipDuplicates: true,
+  })
+}
+
+/** Creates this year's balances for one employee for every active leave type. */
+export async function createBalancesForEmployee(userId: string) {
+  const currentYear = new Date().getFullYear()
+  const leaveTypes = await prisma.leaveType.findMany({ where: { isActive: true } })
+
+  await prisma.leaveBalance.createMany({
+    data: leaveTypes.map(lt => ({
+      userId,
+      leaveTypeId: lt.id,
+      year: currentYear,
+      totalDays: lt.daysAllowed,
+      usedDays: 0,
+    })),
+    skipDuplicates: true,
+  })
 }

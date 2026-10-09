@@ -1,30 +1,22 @@
-import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { requireUser } from '@/lib/api-auth'
 import { NextResponse } from 'next/server'
 
-export async function GET(req: Request) {
-  const session = await auth()
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+export async function GET() {
+  const guard = await requireUser('EMPLOYEE')
+  if (guard.response) return guard.response
 
   try {
-    const userId = (session.user as any).id
-    const now = new Date()
-
     // Find any active pending verification
     const verification = await prisma.workVerification.findFirst({
       where: {
-        userId,
+        userId: guard.user.id,
         status: 'PENDING',
-        expiresAt: { gt: now }
+        expiresAt: { gt: new Date() }
       },
-      orderBy: { sentAt: 'desc' }
+      orderBy: { sentAt: 'desc' },
+      select: { id: true, expiresAt: true },
     })
-
-    if (!verification) {
-      return NextResponse.json(null)
-    }
 
     return NextResponse.json(verification)
   } catch (error) {

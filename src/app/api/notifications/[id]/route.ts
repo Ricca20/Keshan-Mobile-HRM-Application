@@ -1,4 +1,4 @@
-import { auth } from '@/lib/auth'
+import { requireUser } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 
@@ -6,12 +6,9 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth()
-  const userId = session?.user?.id
-
-  if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const guard = await requireUser()
+  if (guard.response) return guard.response
+  const userId = guard.user.id
 
   try {
     const { id } = await params

@@ -11,6 +11,15 @@ class CustomAuthError extends CredentialsSignin {
   }
 }
 
+// Single generic code so the login form never reveals whether an account exists
+const INVALID_CREDENTIALS = 'INVALID_CREDENTIALS'
+
+const MAX_FAILED_ATTEMPTS = 5
+const LOCKOUT_MS = 15 * 60 * 1000
+
+// Compared against when the user doesn't exist, so response timing doesn't leak that either
+const DUMMY_HASH = bcrypt.hashSync('timing-equalizer-not-a-real-password', 12)
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     CredentialsProvider({
@@ -20,22 +29,41 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null
+        const email = typeof credentials?.email === 'string' ? credentials.email.trim() : ''
+        const password = typeof credentials?.password === 'string' ? credentials.password : ''
+        if (!email || !password || password.length > 200) throw new CustomAuthError(INVALID_CREDENTIALS)
 
         try {
-          const user = await prisma.user.findUnique({
-            where: { email: credentials.email as string },
-            include: { shop: true },
+          const user = await prisma.user.findFirst({
+            where: { email: { equals: email, mode: 'insensitive' } },
           })
 
-          if (!user) throw new CustomAuthError('USER_NOT_FOUND')
-          if (!user.isActive) throw new CustomAuthError('USER_NOT_ACTIVE')
+          const passwordMatch = await bcrypt.compare(password, user?.password ?? DUMMY_HASH)
+          if (!user) throw new CustomAuthError(INVALID_CREDENTIALS)
 
-          const passwordMatch = await bcrypt.compare(
-            credentials.password as string,
-            user.password
-          )
-          if (!passwordMatch) throw new CustomAuthError('PASSWORD_MISMATCH')
+          if (user.lockedUntil && user.lockedUntil > new Date()) {
+            throw new CustomAuthError(INVALID_CREDENTIALS)
+          }
+
+          if (!passwordMatch) {
+            const attempts = user.failedLoginAttempts + 1
+            await prisma.user.update({
+              where: { id: user.id },
+              data: attempts >= MAX_FAILED_ATTEMPTS
+                ? { failedLoginAttempts: 0, lockedUntil: new Date(Date.now() + LOCKOUT_MS) }
+                : { failedLoginAttempts: attempts },
+            })
+            throw new CustomAuthError(INVALID_CREDENTIALS)
+          }
+
+          if (!user.isActive) throw new CustomAuthError(INVALID_CREDENTIALS)
+
+          if (user.failedLoginAttempts > 0 || user.lockedUntil) {
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { failedLoginAttempts: 0, lockedUntil: null },
+            })
+          }
 
           return {
             id: user.id,
@@ -43,11 +71,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             email: user.email,
             role: user.role,
             shopId: user.shopId,
-          } as any
-        } catch (e: any) {
-          console.error("AUTHORIZE ERROR:", e)
+          }
+        } catch (e) {
           if (e instanceof CustomAuthError) throw e
-          throw new CustomAuthError(e.message || 'UNKNOWN_ERROR')
+          console.error('AUTHORIZE ERROR:', e)
+          throw new CustomAuthError(INVALID_CREDENTIALS)
         }
       },
     }),
@@ -55,18 +83,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.role = (user as any).role
-        token.shopId = (user as any).shopId
+        token.role = user.role
+        token.shopId = user.shopId
+        token.authTime = Date.now()
+        return token
       }
-      
-      // On subsequent requests, verify user is still active
-      if (!user && token.sub) {
+
+      // On subsequent requests, verify the user is still active and hasn't changed password
+      if (token.sub) {
         const dbUser = await prisma.user.findUnique({
           where: { id: token.sub },
-          select: { isActive: true, role: true, shopId: true }
+          select: { isActive: true, role: true, shopId: true, passwordChangedAt: true }
         })
-        
-        if (!dbUser || !dbUser.isActive) {
+
+        const passwordChangedAfterLogin =
+          !!dbUser?.passwordChangedAt &&
+          dbUser.passwordChangedAt.getTime() > (token.authTime ?? 0)
+
+        if (!dbUser || !dbUser.isActive || passwordChangedAfterLogin) {
           token.error = 'Deactivated'
         } else {
           token.role = dbUser.role
@@ -77,13 +111,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     async session({ session, token }) {
       if (token.error === 'Deactivated') {
-        return {} as any
+        // No user on the session: every guard treats this as signed out
+        return { expires: session.expires } as typeof session
       }
 
       if (session.user) {
-        ;(session.user as any).id = token.sub
-        ;(session.user as any).role = token.role
-        ;(session.user as any).shopId = token.shopId
+        session.user.id = token.sub as string
+        session.user.role = token.role
+        session.user.shopId = token.shopId
       }
       return session
     },
@@ -91,7 +126,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   pages: {
     signIn: '/login',
   },
-  session: { strategy: 'jwt', maxAge: 24 * 60 * 60 }, // 24 hours
+  session: { strategy: 'jwt', maxAge: 12 * 60 * 60 }, // 12 hours
   secret: process.env.AUTH_SECRET,
   trustHost: true,
 })

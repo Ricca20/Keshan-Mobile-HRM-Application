@@ -1,158 +1,131 @@
-import { prisma } from './prisma'
-import { getDaysInMonth, eachDayOfInterval } from 'date-fns'
-import { processDailyAttendance, getSetting } from './attendance'
+import type { Settings } from './settings'
+import { weeklyOffDays } from './settings'
+import { colomboDateStr, addDays, dayOfWeek, dbDateStr, eachDateStr, monthBounds } from './time'
 
-/**
- * Calculates the number of valid clocked days for a user in a given month.
- */
-async function countValidClockDays(userId: string, month: number, year: number): Promise<number> {
-  const startOfMonth = new Date(year, month - 1, 1)
-  const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999)
+type AttendanceRecord = {
+  date: Date
+  status: 'PRESENT' | 'ABSENT' | 'HALF_DAY' | 'LEAVE'
+  isLate: boolean
+  lateMinutes: number
+  otHours: number
+}
 
-  // Get all valid clock-ins for the month
-  const clockIns = await prisma.clockLog.findMany({
-    where: {
-      userId,
-      type: 'IN',
-      isValid: true,
-      timestamp: {
-        gte: startOfMonth,
-        lte: endOfMonth
-      }
-    },
-    select: { timestamp: true }
-  })
+type ApprovedLeave = {
+  startDate: Date
+  endDate: Date
+  leaveType: { isPaid: boolean }
+}
 
-  // To count unique days, format timestamp to YYYY-MM-DD and add to a Set
-  const uniqueDays = new Set(
-    clockIns.map(log => log.timestamp.toISOString().split('T')[0])
-  )
-
-  return uniqueDays.size
+type PayrollUser = {
+  id: string
+  salary: number
+  joinDate: Date
+  penaltyPoints: number
 }
 
 /**
- * Generates the paysheet data for an employee for a specific month.
- * This does NOT save it to the DB; it returns the calculated object.
+ * Calculates one employee's paysheet for a month from their DailyAttendance rows and
+ * approved leave. Only days that are already over (up to yesterday, Colombo time) and
+ * on/after the join date are evaluated. A past working day with no attendance row and
+ * no approved leave counts as absent.
  */
-export async function generatePaySheetData(userId: string, month: number, year: number) {
-  const user = await prisma.user.findUnique({ where: { id: userId } })
-  if (!user) throw new Error(`User ${userId} not found`)
+export function calculatePaysheet(
+  user: PayrollUser,
+  month: number,
+  year: number,
+  attendance: AttendanceRecord[],
+  leaves: ApprovedLeave[],
+  settings: Settings
+) {
+  const { first, last } = monthBounds(month, year)
+  const yesterday = addDays(colomboDateStr(), -1)
+  const joined = colomboDateStr(user.joinDate)
+  const from = joined > first ? joined : first
+  const to = yesterday < last ? yesterday : last
+  const offDays = weeklyOffDays(settings)
 
-  const startOfMonth = new Date(year, month - 1, 1)
-  const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999)
+  const byDate = new Map(attendance.map(a => [dbDateStr(a.date), a]))
+  const leaveOn = (d: string) =>
+    leaves.find(l => dbDateStr(l.startDate) <= d && dbDateStr(l.endDate) >= d)
 
-  // As per client preference, working days = total days in the month
-  const workingDays = getDaysInMonth(startOfMonth)
-
-  // Get HRMS Settings
-  const otRate = parseFloat(await getSetting('OT_RATE_PER_HOUR', '1000'))
-  const latePenaltyAmount = parseFloat(await getSetting('LATE_PENALTY_AMOUNT', '500'))
-
-  // Process all attendance days for this user in this month
-  const daysInMonth = eachDayOfInterval({ start: startOfMonth, end: endOfMonth })
-  const attendanceRecords = await Promise.all(
-    daysInMonth.map(date => processDailyAttendance(userId, date))
-  )
+  const baseSalary = user.salary || 0
+  const dailyRate = baseSalary / 30
+  const halfDayRate = dailyRate * 0.5
 
   let paidDays = 0
   let unpaidDays = 0
-  
-  let otHoursTotal = 0
-  let otPay = 0
-  
-  let lateMinutesTotal = 0
-  let lateDeduction = 0
-  
   let halfDaysTotal = 0
-  let halfDayDeduction = 0
+  let lateDays = 0
+  let lateMinutesTotal = 0
+  let otHoursTotal = 0
 
-  const dailyRate = user.salary / workingDays
+  for (const d of from <= to ? eachDateStr(from, to) : []) {
+    const record = byDate.get(d)
+    const leave = leaveOn(d)
 
-  for (const record of attendanceRecords) {
-     if (record.status === 'PRESENT') {
-        paidDays += 1
-     } else if (record.status === 'HALF_DAY') {
-        paidDays += 0.5
+    if (record?.status === 'PRESENT' || record?.status === 'HALF_DAY') {
+      if (record.status === 'HALF_DAY') {
         halfDaysTotal += 1
-        halfDayDeduction += (dailyRate * 0.5) // Deduct half a day
-     } else if (record.status === 'LEAVE') {
-        // Is it paid or unpaid? We have to check the LeaveRequest
-        const leave = await prisma.leaveRequest.findFirst({
-           where: {
-              userId,
-              status: 'APPROVED',
-              startDate: { lte: record.date },
-              endDate: { gte: record.date }
-           },
-           include: { leaveType: true }
-        })
-        if (leave?.leaveType.isPaid) {
-           paidDays += 1
-        } else {
-           unpaidDays += 1
-        }
-     } else if (record.status === 'ABSENT') {
-        unpaidDays += 1
-     }
-
-     if (record.isLate) {
+        paidDays += 0.5
+      } else {
+        paidDays += 1
+      }
+      if (record.isLate) {
+        lateDays += 1
         lateMinutesTotal += record.lateMinutes
-        lateDeduction += latePenaltyAmount // Fixed deduction per late day
-     }
-
-     if (record.otHours > 0) {
-        otHoursTotal += record.otHours
-        otPay += (record.otHours * otRate)
-     }
+      }
+      otHoursTotal += record.otHours || 0
+    } else if (leave) {
+      // LEAVE rows, or ABSENT/missing days later covered by an approved leave
+      if (leave.leaveType.isPaid) paidDays += 1
+      else unpaidDays += 1
+    } else if (record?.status === 'ABSENT' || !offDays.includes(dayOfWeek(d))) {
+      unpaidDays += 1
+    }
   }
 
-  // Deduct for absences
-  const deductionFromUnpaid = unpaidDays * dailyRate
+  const unpaidDeduction = unpaidDays * dailyRate
+  const halfDayDeduction = halfDaysTotal * halfDayRate
+  const lateDeduction = lateDays * settings.LATE_PENALTY_AMOUNT
+  const otPay = otHoursTotal * settings.OT_RATE_PER_HOUR
 
-  // Penalty Calculation: Deduct a base amount per 10 points (can be overridden by admin later)
-  const penaltySets = Math.floor(user.penaltyPoints / 10)
-  const penaltyDeduction = penaltySets * 1000 // 1000 deduction per 10 points
+  const penaltyBulks = Math.floor(user.penaltyPoints / settings.PENALTY_THRESHOLD)
+  const penaltyDeduction = penaltyBulks * settings.PENALTY_AMOUNT
 
-  const totalDeductions = deductionFromUnpaid + lateDeduction + halfDayDeduction + penaltyDeduction
-  const totalBonuses = otPay
-  
-  const netPay = user.salary + totalBonuses - totalDeductions
+  const deductions = round2(unpaidDeduction + halfDayDeduction + lateDeduction + penaltyDeduction)
 
-  let deductionNote = ''
-  if (penaltyDeduction > 0) {
-    deductionNote = `Salary cut for ${user.penaltyPoints} Penalty Points. `
-  }
-  if (lateDeduction > 0) {
-    deductionNote += `Late Deduction: ${lateDeduction}. `
-  }
-  if (halfDayDeduction > 0) {
-    deductionNote += `Half-day Deduction: ${halfDayDeduction}. `
-  }
-  
-  let bonusNote = ''
-  if (otPay > 0) {
-    bonusNote = `OT Pay: ${otPay} for ${otHoursTotal} hours.`
-  }
+  const notes: string[] = []
+  if (unpaidDays > 0) notes.push(`Unpaid/Absent (${unpaidDays} days).`)
+  if (halfDaysTotal > 0) notes.push(`Half Days (${halfDaysTotal}).`)
+  if (lateDays > 0) notes.push(`Late (${lateDays} days x Rs.${settings.LATE_PENALTY_AMOUNT}).`)
+  if (penaltyBulks > 0) notes.push(`Penalty (${user.penaltyPoints} pts = ${penaltyBulks}x Rs.${settings.PENALTY_AMOUNT}).`)
 
   return {
-    userId,
+    userId: user.id,
     month,
     year,
-    baseSalary: user.salary,
-    paidDays,
+    baseSalary,
+    paidDays: Math.ceil(paidDays),
     unpaidDays,
-    deductions: totalDeductions,
-    deductionNote: deductionNote.trim() || null,
-    bonuses: totalBonuses,
-    bonusNote: bonusNote || null,
+    deductions,
+    deductionNote: notes.join(' ') || null,
+    bonuses: 0,
     otHoursTotal,
-    otPay,
+    otPay: round2(otPay),
     lateMinutesTotal,
-    lateDeduction,
+    lateDeduction: round2(lateDeduction),
     halfDaysTotal,
-    halfDayDeduction,
-    netPay,
-    status: 'DRAFT' as const
+    halfDayDeduction: round2(halfDayDeduction),
+    netPay: calculateNetPay(baseSalary, otPay, deductions, 0),
+    status: 'DRAFT' as const,
   }
+}
+
+/** Net pay never goes below zero. */
+export function calculateNetPay(baseSalary: number, otPay: number, deductions: number, bonuses: number) {
+  return Math.max(0, round2(baseSalary + otPay + bonuses - deductions))
+}
+
+function round2(n: number) {
+  return Math.round(n * 100) / 100
 }

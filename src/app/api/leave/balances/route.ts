@@ -1,34 +1,25 @@
-import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { requireUser } from '@/lib/api-auth'
 import { NextResponse } from 'next/server'
 
 export async function GET(req: Request) {
-  const session = await auth()
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const guard = await requireUser()
+  if (guard.response) return guard.response
+  const { user } = guard
 
   try {
     const { searchParams } = new URL(req.url)
-    const userId = searchParams.get('userId') || (session.user as any).id
-    const currentYear = new Date().getFullYear()
+    const userId = searchParams.get('userId') || user.id
 
-    // Ensure users can only query their own balances unless they are an admin
-    if ((session.user as any).role !== 'ADMIN' && userId !== (session.user as any).id) {
+    // Users can only query their own balances unless they are an admin
+    if (user.role !== 'ADMIN' && userId !== user.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const balances = await prisma.leaveBalance.findMany({
-      where: {
-        userId,
-        year: currentYear
-      },
-      include: {
-        leaveType: true
-      },
-      orderBy: {
-        leaveType: { name: 'asc' }
-      }
+      where: { userId, year: new Date().getFullYear() },
+      include: { leaveType: true },
+      orderBy: { leaveType: { name: 'asc' } }
     })
 
     return NextResponse.json(balances)
