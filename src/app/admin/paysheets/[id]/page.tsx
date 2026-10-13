@@ -2,14 +2,27 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, CheckCircle2, Save, AlertTriangle, TrendingDown, TrendingUp, Building, CalendarDays, Calculator, Clock } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Save, AlertTriangle, TrendingDown, TrendingUp, Building, Clock, Receipt } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useState, useEffect } from 'react'
 import { useToast } from '@/components/ui/toast'
 import { ConfirmModal, PromptModal } from '@/components/ui/modal'
-import { formatCurrency } from '@/lib/utils'
+import { PayslipBreakdown } from '@/components/payroll/PayslipBreakdown'
+import { automaticDeductions, calculateNetPay, extraDeduction, round2, type PaysheetAmounts } from '@/lib/payslip'
+
+type Paysheet = PaysheetAmounts & {
+  id: string
+  month: number
+  year: number
+  status: 'DRAFT' | 'FINALIZED' | 'PAYMENT_CLAIMED' | 'ACKNOWLEDGED' | 'DISPUTED'
+  paymentReference: string | null
+  paidAt: string | null
+  acknowledgedAt: string | null
+  disputeReason: string | null
+  user: { name: string, shop: { name: string } | null }
+}
 
 export default function PaysheetDetailPage() {
   const { id } = useParams()
@@ -17,14 +30,15 @@ export default function PaysheetDetailPage() {
   const queryClient = useQueryClient()
   
   const [bonuses, setBonuses] = useState<number>(0)
-  const [deductions, setDeductions] = useState<number>(0)
+  // Admin's extra deduction, on top of the automatic ones
+  const [extra, setExtra] = useState<number>(0)
   const [bonusNote, setBonusNote] = useState('')
   const [deductionNote, setDeductionNote] = useState('')
   const toast = useToast()
   const [isFinalizeModalOpen, setIsFinalizeModalOpen] = useState(false)
   const [isPaidModalOpen, setIsPaidModalOpen] = useState(false)
 
-  const { data: ps, isLoading } = useQuery<any>({
+  const { data: ps, isLoading } = useQuery<Paysheet>({
     queryKey: ['paysheet', id],
     queryFn: async () => {
       const res = await fetch(`/api/paysheets/${id}`)
@@ -36,7 +50,7 @@ export default function PaysheetDetailPage() {
   useEffect(() => {
     if (ps) {
       setBonuses(ps.bonuses)
-      setDeductions(ps.deductions)
+      setExtra(extraDeduction(ps))
       setBonusNote(ps.bonusNote || '')
       setDeductionNote(ps.deductionNote || '')
     }
@@ -47,7 +61,12 @@ export default function PaysheetDetailPage() {
       const res = await fetch(`/api/paysheets/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bonuses, deductions, bonusNote, deductionNote })
+        body: JSON.stringify({
+          bonuses,
+          deductions: round2(Math.max(0, automaticDeductions(ps!) + extra)),
+          bonusNote,
+          deductionNote,
+        })
       })
       if (!res.ok) {
         const err = await res.json()
@@ -59,7 +78,7 @@ export default function PaysheetDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['paysheet', id] })
       toast.success('Paysheet updated')
     },
-    onError: (err: any) => toast.error(err.message)
+    onError: (err: Error) => toast.error(err.message)
   })
 
   const finalizeMutation = useMutation({
@@ -79,7 +98,7 @@ export default function PaysheetDetailPage() {
       setIsFinalizeModalOpen(false)
       toast.success('Paysheet finalized!')
     },
-    onError: (err: any) => toast.error(err.message)
+    onError: (err: Error) => toast.error(err.message)
   })
 
   const markPaidMutation = useMutation({
@@ -101,7 +120,7 @@ export default function PaysheetDetailPage() {
       setIsPaidModalOpen(false)
       toast.success('Marked as paid! Awaiting employee acknowledgement.')
     },
-    onError: (err: any) => toast.error(err.message)
+    onError: (err: Error) => toast.error(err.message)
   })
 
   const resolveMutation = useMutation({
@@ -118,7 +137,7 @@ export default function PaysheetDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['paysheets'] })
       toast.success('Dispute resolved. Employee will re-acknowledge.')
     },
-    onError: (err: any) => toast.error(err.message)
+    onError: (err: Error) => toast.error(err.message)
   })
 
   if (isLoading) {
@@ -133,13 +152,24 @@ export default function PaysheetDetailPage() {
 
   const isDraft = ps.status === 'DRAFT'
   const isFinalized = ps.status === 'FINALIZED'
-  // Preview net pay calculation
-  const netPayPreview = ps.baseSalary - deductions + bonuses
+  // Live preview of the payslip with the adjustments typed so far
+  const previewDeductions = round2(Math.max(0, automaticDeductions(ps) + extra))
+  const preview: PaysheetAmounts = { ...ps, bonuses, bonusNote, deductionNote, deductions: previewDeductions }
+  const netPayPreview = calculateNetPay(ps.baseSalary, ps.otPay, previewDeductions, bonuses)
+
+  const stats = [
+    { label: 'Days paid', value: ps.paidDays, tone: 'text-emerald-700' },
+    { label: 'Days unpaid', value: ps.unpaidDays, hint: 'absent or unpaid leave', tone: ps.unpaidDays > 0 ? 'text-red-700' : 'text-slate-900' },
+    { label: 'Half days', value: ps.halfDaysTotal, tone: ps.halfDaysTotal > 0 ? 'text-orange-700' : 'text-slate-900' },
+    { label: 'Late days', value: ps.lateDaysTotal, hint: ps.lateMinutesTotal > 0 ? `${ps.lateMinutesTotal} min in total` : undefined, tone: ps.lateDaysTotal > 0 ? 'text-orange-700' : 'text-slate-900' },
+    { label: 'Overtime', value: `${ps.otHoursTotal} h`, tone: ps.otHoursTotal > 0 ? 'text-indigo-700' : 'text-slate-900' },
+    { label: 'Penalty points charged', value: ps.penaltyPointsCharged, tone: ps.penaltyPointsCharged > 0 ? 'text-red-700' : 'text-slate-900' },
+  ]
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pt-4 pb-20">
       <div className="flex items-center gap-4 mb-4">
-        <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-full bg-white border border-slate-200 shadow-sm hover:bg-slate-50 text-slate-500">
+        <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-full bg-white border border-slate-200 shadow-sm hover:bg-slate-50 text-slate-500" aria-label="Back">
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <div>
@@ -152,55 +182,45 @@ export default function PaysheetDetailPage() {
         <div className="md:col-span-2 space-y-6">
           <Card className="border-slate-200 shadow-sm overflow-hidden">
             <CardHeader className="flex flex-row items-center justify-between pb-4 bg-slate-50/50 border-b border-slate-100">
-              <CardTitle className="text-lg font-bold text-slate-900">Overview</CardTitle>
-              <Badge variant={isDraft ? 'warning' : 'success'} className="uppercase tracking-wider font-bold">{ps.status}</Badge>
+              <div>
+                <CardTitle className="text-lg font-bold text-slate-900">Attendance this month</CardTitle>
+                <CardDescription className="flex items-center gap-1.5 mt-1"><Building className="w-3.5 h-3.5" /> {ps.user.shop?.name ?? 'No shop'}</CardDescription>
+              </div>
+              <Badge variant={isDraft ? 'warning' : 'success'} className="uppercase tracking-wider font-bold">{ps.status.replace('_', ' ')}</Badge>
             </CardHeader>
             <CardContent className="p-6">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                  <p className="text-sm text-slate-500 font-medium mb-1 flex items-center gap-1.5"><Building className="w-4 h-4" /> Shop</p>
-                  <p className="font-bold text-slate-900">{ps.user.shop.name}</p>
-                </div>
-                <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
-                  <p className="text-sm text-emerald-600/80 font-medium mb-1 flex items-center gap-1.5"><CalendarDays className="w-4 h-4" /> Paid Days</p>
-                  <p className="font-bold text-emerald-900">{ps.paidDays}</p>
-                </div>
-                <div className="bg-orange-50 rounded-xl p-4 border border-orange-100 sm:col-span-1 col-span-2">
-                  <p className="text-sm text-orange-600/80 font-medium mb-1 flex items-center gap-1.5"><CalendarDays className="w-4 h-4" /> Unpaid Days</p>
-                  <p className="font-bold text-orange-900">{ps.unpaidDays}</p>
-                </div>
-                <div className="bg-indigo-50 rounded-xl p-4 border border-indigo-100 sm:col-span-3">
-                  <p className="text-sm text-indigo-600/80 font-medium mb-2 flex items-center gap-1.5"><Clock className="w-4 h-4" /> HRMS Breakdown</p>
-                  <div className="grid grid-cols-3 gap-4">
-                     <div>
-                        <p className="text-xs text-indigo-500 uppercase tracking-wider font-bold">OT Hours</p>
-                        <p className="font-bold text-indigo-900">{ps.otHoursTotal}h <span className="text-indigo-600 text-sm font-medium">(Rs. {ps.otPay})</span></p>
-                     </div>
-                     <div>
-                        <p className="text-xs text-indigo-500 uppercase tracking-wider font-bold">Late Minutes</p>
-                        <p className="font-bold text-indigo-900">{ps.lateMinutesTotal}m <span className="text-indigo-600 text-sm font-medium">(-Rs. {ps.lateDeduction})</span></p>
-                     </div>
-                     <div>
-                        <p className="text-xs text-indigo-500 uppercase tracking-wider font-bold">Half Days</p>
-                        <p className="font-bold text-indigo-900">{ps.halfDaysTotal} <span className="text-indigo-600 text-sm font-medium">(-Rs. {ps.halfDayDeduction})</span></p>
-                     </div>
+              <dl className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {stats.map(stat => (
+                  <div key={stat.label} className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+                    <dt className="text-xs text-slate-500">{stat.label}</dt>
+                    <dd className={`text-xl font-bold mt-0.5 ${stat.tone}`}>{stat.value}</dd>
+                    {stat.hint && <p className="text-[11px] text-slate-400 mt-0.5">{stat.hint}</p>}
                   </div>
-                </div>
-              </div>
+                ))}
+              </dl>
+              <p className="text-xs text-slate-500 mt-4">
+                Counted from the daily attendance records up to yesterday. To fix a day, correct it on the Attendance page and regenerate this draft.
+              </p>
             </CardContent>
           </Card>
 
           <Card className="border-slate-200 shadow-sm overflow-hidden">
             <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-4">
               <CardTitle className="text-lg font-bold text-slate-900">Adjustments</CardTitle>
-              <CardDescription>Manually override bonuses or deductions.</CardDescription>
+              <CardDescription>
+                {isDraft
+                  ? 'Add a bonus or an extra deduction. The automatic deductions in the payslip stay as they are.'
+                  : 'Adjustments can only be changed while the paysheet is a draft.'}
+              </CardDescription>
             </CardHeader>
             <CardContent className="p-6 space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div className="space-y-3 bg-emerald-50/30 p-4 rounded-2xl border border-emerald-100/50">
-                  <label className="text-sm font-semibold text-emerald-700 flex items-center gap-1.5"><TrendingUp className="w-4 h-4" /> Bonuses (Rs)</label>
+                  <label htmlFor="adj-bonus" className="text-sm font-semibold text-emerald-700 flex items-center gap-1.5"><TrendingUp className="w-4 h-4" /> Bonus / allowance (Rs)</label>
                   <input
+                    id="adj-bonus"
                     type="number"
+                    min={0}
                     disabled={!isDraft}
                     className="w-full p-3 rounded-xl border border-slate-200 bg-white text-slate-900 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all outline-none disabled:opacity-60 disabled:bg-slate-50 font-semibold"
                     value={bonuses}
@@ -209,26 +229,30 @@ export default function PaysheetDetailPage() {
                   <input
                     type="text"
                     disabled={!isDraft}
-                    placeholder="Bonus note (e.g. Performance)"
+                    aria-label="Bonus reason"
+                    placeholder="Reason (e.g. Sales target)"
                     className="w-full p-3 rounded-xl border border-slate-200 bg-white text-slate-900 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all outline-none text-sm disabled:opacity-60 disabled:bg-slate-50"
                     value={bonusNote}
                     onChange={(e) => setBonusNote(e.target.value)}
                   />
                 </div>
-                
+
                 <div className="space-y-3 bg-red-50/30 p-4 rounded-2xl border border-red-100/50">
-                  <label className="text-sm font-semibold text-red-700 flex items-center gap-1.5"><TrendingDown className="w-4 h-4" /> Deductions (Rs)</label>
+                  <label htmlFor="adj-extra" className="text-sm font-semibold text-red-700 flex items-center gap-1.5"><TrendingDown className="w-4 h-4" /> Extra deduction (Rs)</label>
                   <input
+                    id="adj-extra"
                     type="number"
+                    min={0}
                     disabled={!isDraft}
                     className="w-full p-3 rounded-xl border border-slate-200 bg-white text-slate-900 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 transition-all outline-none disabled:opacity-60 disabled:bg-slate-50 font-semibold"
-                    value={deductions}
-                    onChange={(e) => setDeductions(Number(e.target.value))}
+                    value={extra}
+                    onChange={(e) => setExtra(Number(e.target.value))}
                   />
                   <input
                     type="text"
                     disabled={!isDraft}
-                    placeholder="Deduction note (e.g. Absences)"
+                    aria-label="Extra deduction reason"
+                    placeholder="Reason (e.g. Salary advance)"
                     className="w-full p-3 rounded-xl border border-slate-200 bg-white text-slate-900 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 transition-all outline-none text-sm disabled:opacity-60 disabled:bg-slate-50"
                     value={deductionNote}
                     onChange={(e) => setDeductionNote(e.target.value)}
@@ -248,30 +272,13 @@ export default function PaysheetDetailPage() {
         </div>
 
         <div className="space-y-6">
-          <Card className="border-blue-200 shadow-sm bg-blue-50/30 overflow-hidden relative">
-            <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
-              <Calculator className="w-32 h-32 text-blue-900" />
-            </div>
-            <CardHeader className="pb-2 relative z-10">
-              <CardTitle className="text-lg font-bold text-blue-900">Summary</CardTitle>
+          <Card className="border-blue-200 shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg font-bold text-blue-900 flex items-center gap-2"><Receipt className="w-5 h-5" /> Payslip</CardTitle>
+              <CardDescription>How the net pay is worked out.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 relative z-10">
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-slate-600 font-medium">Base Salary</span>
-                <span className="font-semibold text-slate-900">{formatCurrency(ps.baseSalary)}</span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-emerald-600 font-medium flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5" /> Bonuses</span>
-                <span className="font-semibold text-emerald-600">+ {formatCurrency(bonuses)}</span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-red-600 font-medium flex items-center gap-1.5"><TrendingDown className="w-3.5 h-3.5" /> Deductions</span>
-                <span className="font-semibold text-red-600">- {formatCurrency(deductions)}</span>
-              </div>
-              <div className="pt-4 border-t-2 border-dashed border-blue-200/60 flex justify-between items-center bg-white p-4 rounded-xl shadow-sm mt-4">
-                <span className="font-bold text-slate-900">Net Pay</span>
-                <span className="font-black text-2xl text-blue-600">{formatCurrency(netPayPreview)}</span>
-              </div>
+            <CardContent>
+              <PayslipBreakdown paysheet={preview} netPay={netPayPreview} />
             </CardContent>
           </Card>
 
@@ -319,7 +326,7 @@ export default function PaysheetDetailPage() {
                 Awaiting Acknowledgement
               </div>
               <p className="text-sm text-orange-700 mb-2">
-                You marked this as paid on <strong>{new Date(ps.paidAt).toLocaleDateString()}</strong>.
+                You marked this as paid on <strong>{new Date(ps.paidAt!).toLocaleDateString()}</strong>.
               </p>
               {ps.paymentReference && (
                 <p className="text-sm font-mono bg-white px-2 py-1 rounded border border-orange-200 text-orange-800">
@@ -336,7 +343,7 @@ export default function PaysheetDetailPage() {
                 Payment Verified
               </div>
               <p className="text-sm text-emerald-700">
-                The employee verified receiving this payment on <strong>{new Date(ps.acknowledgedAt).toLocaleString()}</strong>.
+                The employee verified receiving this payment on <strong>{new Date(ps.acknowledgedAt!).toLocaleString()}</strong>.
               </p>
             </div>
           )}

@@ -1,5 +1,6 @@
 import type { Settings } from './settings'
 import { weeklyOffDays } from './settings'
+import { calculateNetPay, DAYS_PER_MONTH, round2 } from './payslip'
 import { colomboDateStr, addDays, dayOfWeek, dbDateStr, eachDateStr, monthBounds } from './time'
 
 type AttendanceRecord = {
@@ -49,7 +50,7 @@ export function calculatePaysheet(
     leaves.find(l => dbDateStr(l.startDate) <= d && dbDateStr(l.endDate) >= d)
 
   const baseSalary = user.salary || 0
-  const dailyRate = baseSalary / 30
+  const dailyRate = baseSalary / DAYS_PER_MONTH
   const halfDayRate = dailyRate * 0.5
 
   let paidDays = 0
@@ -94,12 +95,6 @@ export function calculatePaysheet(
 
   const deductions = round2(unpaidDeduction + halfDayDeduction + lateDeduction + penaltyDeduction)
 
-  const notes: string[] = []
-  if (unpaidDays > 0) notes.push(`Unpaid/Absent (${unpaidDays} days).`)
-  if (halfDaysTotal > 0) notes.push(`Half Days (${halfDaysTotal}).`)
-  if (lateDays > 0) notes.push(`Late (${lateDays} days x Rs.${settings.LATE_PENALTY_AMOUNT}).`)
-  if (penaltyBulks > 0) notes.push(`Penalty (${user.penaltyPoints} pts = ${penaltyBulks}x Rs.${settings.PENALTY_AMOUNT}).`)
-
   return {
     userId: user.id,
     month,
@@ -108,25 +103,19 @@ export function calculatePaysheet(
     paidDays: Math.ceil(paidDays),
     unpaidDays,
     deductions,
-    deductionNote: notes.join(' ') || null,
+    deductionNote: null, // reserved for the admin's reason for an extra deduction
     bonuses: 0,
     otHoursTotal,
     otPay: round2(otPay),
     lateMinutesTotal,
+    lateDaysTotal: lateDays,
     lateDeduction: round2(lateDeduction),
     halfDaysTotal,
     halfDayDeduction: round2(halfDayDeduction),
     penaltyPointsCharged: penaltyBulks * settings.PENALTY_THRESHOLD,
+    penaltyDeduction: round2(penaltyDeduction),
     netPay: calculateNetPay(baseSalary, otPay, deductions, 0),
     status: 'DRAFT' as const,
   }
 }
 
-/** Net pay never goes below zero. */
-export function calculateNetPay(baseSalary: number, otPay: number, deductions: number, bonuses: number) {
-  return Math.max(0, round2(baseSalary + otPay + bonuses - deductions))
-}
-
-function round2(n: number) {
-  return Math.round(n * 100) / 100
-}

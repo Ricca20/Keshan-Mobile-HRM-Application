@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { requireUser, readJson } from '@/lib/api-auth'
 import { validate, paysheetUpdateSchema } from '@/lib/validation'
-import { calculateNetPay } from '@/lib/paysheet'
+import { calculateNetPay } from '@/lib/payslip'
 import { NextResponse } from 'next/server'
 
 const EMPLOYEE_VISIBLE = ['FINALIZED', 'PAYMENT_CLAIMED', 'ACKNOWLEDGED', 'DISPUTED']

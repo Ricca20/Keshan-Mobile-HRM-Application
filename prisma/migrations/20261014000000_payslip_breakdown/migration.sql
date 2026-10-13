@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "PaySheet" ADD COLUMN     "lateDaysTotal" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "penaltyDeduction" DOUBLE PRECISION NOT NULL DEFAULT 0;

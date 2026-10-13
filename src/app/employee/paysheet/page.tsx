@@ -1,26 +1,20 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { FileText, CalendarDays, Wallet, TrendingDown, TrendingUp, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { FileText, CalendarDays, Wallet, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { useState } from 'react'
 import { formatCurrency } from '@/lib/utils'
+import { PayslipBreakdown } from '@/components/payroll/PayslipBreakdown'
+import type { PaysheetAmounts } from '@/lib/payslip'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
 import { ConfirmModal, PromptModal } from '@/components/ui/modal'
 
-type PaySheet = {
+type PaySheet = PaysheetAmounts & {
   id: string
   month: number
   year: number
-  baseSalary: number
-  paidDays: number
-  unpaidDays: number
-  deductions: number
-  bonuses: number
-  netPay: number
-  bonusNote: string | null
-  deductionNote: string | null
   status: 'DRAFT' | 'FINALIZED' | 'PAYMENT_CLAIMED' | 'ACKNOWLEDGED' | 'DISPUTED'
   finalizedAt: string
   paidAt?: string
@@ -168,46 +162,7 @@ export default function EmployeePaysheetsPage() {
                 
                 <h4 className="font-semibold text-sm tracking-wider text-slate-400 uppercase mb-6">Salary Breakdown</h4>
                 
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center py-2">
-                    <span className="text-slate-600 font-medium">Base Salary</span>
-                    <span className="font-semibold text-slate-900">{formatCurrency(selectedPaysheet.baseSalary)}</span>
-                  </div>
-                  
-                  <div className="flex justify-between items-start py-2 group">
-                    <div className="flex gap-3">
-                      <div className="mt-0.5 bg-red-50 p-1.5 rounded-lg text-red-500">
-                        <TrendingDown className="w-4 h-4" />
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-slate-600 font-medium group-hover:text-red-600 transition-colors">Deductions</span>
-                        <span className="text-xs text-slate-400 mt-0.5">Absences / Unpaid Leave</span>
-                        {selectedPaysheet.deductionNote && <span className="text-xs text-red-500/80 mt-1 bg-red-50 p-1.5 rounded-md inline-block max-w-[200px]">{selectedPaysheet.deductionNote}</span>}
-                      </div>
-                    </div>
-                    <span className="font-semibold text-red-600">- {formatCurrency(selectedPaysheet.deductions)}</span>
-                  </div>
-                  
-                  <div className="flex justify-between items-start py-2 group">
-                    <div className="flex gap-3">
-                      <div className="mt-0.5 bg-emerald-50 p-1.5 rounded-lg text-emerald-500">
-                        <TrendingUp className="w-4 h-4" />
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-slate-600 font-medium group-hover:text-emerald-600 transition-colors">Bonuses & Allowances</span>
-                        {selectedPaysheet.bonusNote && <span className="text-xs text-emerald-600/80 mt-1 bg-emerald-50 p-1.5 rounded-md inline-block max-w-[200px]">{selectedPaysheet.bonusNote}</span>}
-                      </div>
-                    </div>
-                    <span className="font-semibold text-emerald-600">+ {formatCurrency(selectedPaysheet.bonuses)}</span>
-                  </div>
-
-                  <div className="my-6 border-t-2 border-dashed border-slate-200"></div>
-
-                  <div className="flex justify-between items-center bg-blue-50 p-6 rounded-2xl">
-                    <span className="font-bold text-lg text-blue-900">Net Pay</span>
-                    <span className="font-black text-3xl text-blue-600">{formatCurrency(selectedPaysheet.netPay)}</span>
-                  </div>
-                </div>
+                <PayslipBreakdown paysheet={selectedPaysheet} />
 
                 {selectedPaysheet.status === 'PAYMENT_CLAIMED' && (
                   <div className="mt-8 bg-orange-50 border border-orange-200 p-5 rounded-2xl shadow-sm relative overflow-hidden">

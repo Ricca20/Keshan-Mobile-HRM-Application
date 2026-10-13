@@ -158,11 +158,14 @@ model PaySheet {
   otHoursTotal         Float          @default(0)
   otPay                Float          @default(0)
   lateMinutesTotal     Int            @default(0)
+  lateDaysTotal        Int            @default(0)
   lateDeduction        Float          @default(0)
   halfDaysTotal        Int            @default(0)
   halfDayDeduction     Float          @default(0)
   // Penalty points this sheet deducted for; removed from the employee's total on finalize
   penaltyPointsCharged Int            @default(0)
+  // Amount deducted for those points, shown as its own line on the payslip
+  penaltyDeduction     Float          @default(0)
   netPay               Float
   status               PaySheetStatus @default(DRAFT)
   finalizedAt          DateTime?

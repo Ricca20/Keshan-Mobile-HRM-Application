@@ -9,7 +9,9 @@ export default defineConfig({
     path: "prisma/migrations",
     seed: "npx tsx prisma/seed.ts",
   },
+  // CLI only (migrate, studio). Supabase's transaction pooler (port 6543) hangs Prisma
+  // Migrate, so prefer DIRECT_URL (session pooler, port 5432) when it is set.
   datasource: {
-    url: process.env["DATABASE_URL"],
+    url: process.env["DIRECT_URL"] || process.env["DATABASE_URL"],
   },
 });
