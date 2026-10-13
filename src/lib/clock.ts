@@ -54,6 +54,11 @@ export function isValidAllowedIpList(value: string): boolean {
  */
 export function isIpAllowed(allowedIp: string, requestIp: string): boolean {
   if (process.env.NODE_ENV === 'development') return true
+  return ipInList(allowedIp, requestIp)
+}
+
+/** Same match as isIpAllowed, without the development bypass. */
+export function ipInList(allowedIp: string, requestIp: string): boolean {
   if (allowedIp.trim() === BYPASS_IP) return true
 
   const version = isIP(requestIp)

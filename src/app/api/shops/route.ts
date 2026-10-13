@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { requireUser, readJson } from '@/lib/api-auth'
 import { validate, shopSchema } from '@/lib/validation'
 import { NextResponse } from 'next/server'
-import { ipv6Network64 } from '@/lib/clock'
+import { ipInList, ipv6Network64 } from '@/lib/clock'
 
 const DENIED_LOOKBACK_MS = 48 * 60 * 60 * 1000
 
@@ -12,7 +12,10 @@ export async function GET() {
 
   try {
     const [shops, denied] = await Promise.all([
-      prisma.shop.findMany({ orderBy: { name: 'asc' } }),
+      prisma.shop.findMany({
+        orderBy: { name: 'asc' },
+        include: { _count: { select: { users: { where: { role: 'EMPLOYEE', isActive: true } } } } },
+      }),
       // Networks employees were turned away from recently: usually the shop's internet IP changed
       prisma.clockLog.groupBy({
         by: ['shopId', 'ipAddress'],
@@ -22,10 +25,12 @@ export async function GET() {
       }),
     ])
 
-    return NextResponse.json(shops.map(shop => ({
+    return NextResponse.json(shops.map(({ _count, ...shop }) => ({
       ...shop,
+      employeeCount: _count.users,
+      // Hide networks that have been allowed since the denial
       recentDenied: denied
-        .filter(d => d.shopId === shop.id)
+        .filter(d => d.shopId === shop.id && !ipInList(shop.allowedIp, d.ipAddress))
         .sort((a, b) => (b._max.timestamp?.getTime() ?? 0) - (a._max.timestamp?.getTime() ?? 0))
         .slice(0, 5)
         .map(d => ({

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Edit2, Ban, CheckCircle2, User, Building, Banknote, Send, Copy, MessageCircle } from 'lucide-react'
+import { Plus, Edit2, Ban, CheckCircle2, User, Building, Banknote, Send, Copy, MessageCircle, CalendarDays } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -24,7 +24,13 @@ type Employee = {
   shopId: string
   isActive: boolean
   shop?: Shop
+  joinDate: string
   createdAt: string
+}
+
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/)
+  return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : parts[0]?.[1] ?? '')).toUpperCase()
 }
 
 export default function AdminEmployeesPage() {
@@ -251,57 +257,69 @@ export default function AdminEmployeesPage() {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid gap-5 grid-cols-[repeat(auto-fill,minmax(min(100%,19rem),1fr))]">
           {employees.map(employee => (
-            <Card key={employee.id} className={`hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 ${!employee.isActive ? 'opacity-70 bg-slate-50' : 'bg-white'}`}>
-              <CardContent className="p-5 flex flex-col h-full">
-                <div className="flex items-start justify-between mb-4">
-                  <div className={`h-12 w-12 rounded-2xl flex items-center justify-center shrink-0 ${employee.isActive ? 'bg-blue-50 text-blue-500' : 'bg-slate-200 text-slate-400'}`}>
-                    <User className="h-6 w-6" />
+            <Card key={employee.id} className={`flex flex-col border-slate-200 hover:shadow-md transition-shadow ${!employee.isActive ? 'bg-slate-50' : 'bg-white'}`}>
+              <CardContent className="p-5 flex flex-col gap-4 h-full">
+                <div className="flex items-start gap-3">
+                  <div
+                    aria-hidden
+                    className={`h-11 w-11 rounded-full flex items-center justify-center shrink-0 text-sm font-bold ${employee.isActive ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-500'}`}
+                  >
+                    {initials(employee.name)}
                   </div>
-                  {!employee.isActive && <Badge variant="destructive" size="sm">Inactive</Badge>}
-                </div>
-                
-                <div className="mb-4">
-                  <h3 className="font-bold text-slate-900 truncate" title={employee.name}>
-                    {employee.name}
-                  </h3>
-                  <p className="text-xs text-slate-500 truncate" title={employee.email}>{employee.email}</p>
-                </div>
-
-                <div className="space-y-2 text-sm mt-auto mb-5 bg-slate-50 rounded-xl p-3 border border-slate-100">
-                  <div className="flex justify-between items-start gap-2">
-                    <span className="text-slate-500 flex items-center gap-1.5 whitespace-nowrap pt-0.5"><Building className="h-3.5 w-3.5 shrink-0" /> Shop</span>
-                    <span className="font-medium text-slate-700 text-right break-words line-clamp-2">{employee.shop?.name || 'Unassigned'}</span>
+                  <div className="min-w-0 flex-1">
+                    <h3 className={`font-bold leading-snug truncate ${employee.isActive ? 'text-slate-900' : 'text-slate-500'}`} title={employee.name}>
+                      {employee.name}
+                    </h3>
+                    <p className="text-sm text-slate-500 truncate" title={employee.email}>{employee.email}</p>
                   </div>
-                  <div className="flex justify-between items-center gap-2">
-                    <span className="text-slate-500 flex items-center gap-1.5 whitespace-nowrap"><Banknote className="h-3.5 w-3.5 shrink-0" /> Salary</span>
-                    <span className="font-medium text-slate-700 text-right truncate">{formatCurrency(employee.salary)}</span>
-                  </div>
+                  <Badge variant={employee.isActive ? 'success' : 'secondary'} dot className="shrink-0">
+                    {employee.isActive ? 'Active' : 'Inactive'}
+                  </Badge>
                 </div>
 
-                <div className="flex flex-wrap gap-2 justify-end mt-auto pt-4 border-t border-slate-100">
-                  <Button variant="outline" size="sm" className="flex-1" onClick={() => handleEdit(employee)}>
-                    <Edit2 className="h-3.5 w-3.5 mr-1.5" /> Edit
-                  </Button>
-                  {employee.isActive && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                      title="Email a new password setup link (older links stop working)"
-                      isLoading={inviteMutation.isPending && inviteMutation.variables?.id === employee.id}
-                      onClick={() => inviteMutation.mutate(employee)}
-                    >
-                      <Send className="h-3.5 w-3.5 mr-1.5" /> Setup Link
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm rounded-xl bg-slate-50 border border-slate-100 p-3">
+                  <div className="col-span-2 min-w-0">
+                    <dt className="text-xs text-slate-500 flex items-center gap-1.5"><Building className="h-3.5 w-3.5 shrink-0" /> Shop</dt>
+                    <dd className="font-medium text-slate-800 mt-0.5 break-words">{employee.shop?.name || 'Unassigned'}</dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-xs text-slate-500 flex items-center gap-1.5"><Banknote className="h-3.5 w-3.5 shrink-0" /> Salary</dt>
+                    <dd className="font-medium text-slate-800 mt-0.5 tabular-nums">{formatCurrency(employee.salary)}</dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-xs text-slate-500 flex items-center gap-1.5"><CalendarDays className="h-3.5 w-3.5 shrink-0" /> Joined</dt>
+                    <dd className="font-medium text-slate-800 mt-0.5">
+                      {new Date(employee.joinDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Colombo' })}
+                    </dd>
+                  </div>
+                </dl>
+
+                <div className="mt-auto pt-4 border-t border-slate-100 space-y-2">
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" className="flex-1 whitespace-nowrap" onClick={() => handleEdit(employee)}>
+                      <Edit2 className="h-3.5 w-3.5 mr-1.5" /> Edit
                     </Button>
-                  )}
+                    {employee.isActive && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 whitespace-nowrap"
+                        title="Email a new password setup link (older links stop working)"
+                        isLoading={inviteMutation.isPending && inviteMutation.variables?.id === employee.id}
+                        onClick={() => inviteMutation.mutate(employee)}
+                      >
+                        <Send className="h-3.5 w-3.5 mr-1.5" /> Setup Link
+                      </Button>
+                    )}
+                  </div>
                   {employee.isActive ? (
-                    <Button variant="outline" size="sm" className="flex-1 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-200" onClick={() => handleToggleActive(employee.id, true)}>
+                    <Button variant="ghost" size="sm" className="w-full text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => handleToggleActive(employee.id, true)}>
                       <Ban className="h-3.5 w-3.5 mr-1.5" /> Deactivate
                     </Button>
                   ) : (
-                    <Button variant="outline" size="sm" className="flex-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200" onClick={() => handleToggleActive(employee.id, false)}>
+                    <Button variant="outline" size="sm" className="w-full text-emerald-700 border-emerald-200 hover:bg-emerald-50" onClick={() => handleToggleActive(employee.id, false)}>
                       <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Reactivate
                     </Button>
                   )}

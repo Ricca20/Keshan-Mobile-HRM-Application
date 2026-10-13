@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Edit2, Trash2, MapPin, Wifi, Store, ShieldAlert } from 'lucide-react'
+import { Plus, Edit2, Trash2, MapPin, Wifi, Store, ShieldAlert, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -15,6 +15,7 @@ type Shop = {
   name: string
   address: string
   allowedIp: string
+  employeeCount?: number
   recentDenied?: { ip: string, rule: string, attempts: number, lastAt: string }[]
 }
 
@@ -246,76 +247,108 @@ export default function AdminShopsPage() {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {shops.map(shop => (
-            <Card key={shop.id} className="hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 group overflow-hidden border-slate-200">
-              <div className="h-1.5 w-full bg-gradient-to-r from-blue-400 to-indigo-500" />
-              <CardHeader className="pb-4">
-                <div className="flex justify-between items-start">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-50 text-blue-500 rounded-lg">
+        <div className="grid gap-5 grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))]">
+          {shops.map(shop => {
+            const bypass = shop.allowedIp.trim() === 'BYPASS'
+            const networks = bypass ? [] : shop.allowedIp.split(',').map(ip => ip.trim()).filter(Boolean)
+            const denied = bypass ? [] : shop.recentDenied ?? []
+
+            return (
+              <Card key={shop.id} className="flex flex-col border-slate-200 hover:shadow-md transition-shadow">
+                <CardContent className="p-5 flex flex-col gap-4 h-full">
+                  <div className="flex items-start gap-3">
+                    <div className="h-11 w-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
                       <Store className="w-5 h-5" />
                     </div>
-                    <CardTitle className="text-lg font-bold text-slate-900">
-                      {shop.name}
-                    </CardTitle>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-bold text-slate-900 leading-snug break-words">{shop.name}</h3>
+                      <p className="mt-1 flex items-start gap-1 text-sm text-slate-500">
+                        <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                        <span className="line-clamp-2 break-words">{shop.address}</span>
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50" onClick={() => handleEdit(shop)}>
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50" onClick={() => handleDelete(shop.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-                <CardDescription className="flex items-start gap-1.5 mt-3 text-slate-500">
-                  <MapPin className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span className="line-clamp-2">{shop.address}</span>
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3 p-4 bg-slate-50 rounded-xl border border-slate-100 text-sm">
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500 font-medium">Network IP:</span>
-                    {shop.allowedIp === 'BYPASS' ? (
-                      <Badge variant="secondary" className="font-mono text-xs bg-red-50 text-red-600 border-red-200">
-                        CHECK DISABLED
-                      </Badge>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="secondary">
+                      <Users className="w-3 h-3" />
+                      {shop.employeeCount ?? 0} {shop.employeeCount === 1 ? 'employee' : 'employees'}
+                    </Badge>
+                    {bypass ? (
+                      <Badge variant="danger" dot>WiFi check off</Badge>
                     ) : (
-                      <Badge variant="secondary" className="font-mono text-xs bg-white border-slate-200 break-all whitespace-normal text-right">
-                        {shop.allowedIp}
-                      </Badge>
+                      <Badge variant="success" dot>WiFi check on</Badge>
                     )}
                   </div>
-                </div>
-                {shop.allowedIp !== 'BYPASS' && shop.recentDenied && shop.recentDenied.length > 0 && (
-                  <div className="mt-3 p-3 rounded-xl border border-amber-200 bg-amber-50 text-xs space-y-2">
-                    <p className="font-semibold text-amber-800 flex items-center gap-1.5">
-                      <ShieldAlert className="w-3.5 h-3.5" /> Clock-ins denied in the last 48h
+
+                  {bypass ? (
+                    <p className="text-xs text-red-700 bg-red-50 border border-red-100 rounded-xl p-3">
+                      Staff can clock in from any network. Edit the shop and add its WiFi to turn the check back on.
                     </p>
-                    <p className="text-amber-700">If these came from the shop WiFi, the shop&apos;s internet IP has changed. Allow it so staff can clock in.</p>
-                    {shop.recentDenied.map(d => (
-                      <div key={d.ip} className="flex items-center justify-between gap-2">
-                        <span className="font-mono text-slate-700 break-all">
-                          {d.ip} <span className="text-slate-500 font-sans">· {d.attempts}x, last {new Date(d.lastAt).toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit' })}</span>
-                        </span>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs shrink-0"
-                          isLoading={allowIpMutation.isPending && allowIpMutation.variables?.rule === d.rule}
-                          onClick={() => allowIpMutation.mutate({ shop, rule: d.rule })}
-                        >
-                          Allow
-                        </Button>
+                  ) : (
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
+                        <Wifi className="w-3.5 h-3.5" /> Allowed {networks.length === 1 ? 'network' : 'networks'}
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {networks.map(ip => (
+                          <span key={ip} className="font-mono text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 max-w-full break-all">
+                            {ip}
+                          </span>
+                        ))}
                       </div>
-                    ))}
+                    </div>
+                  )}
+
+                  {denied.length > 0 && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs space-y-2.5">
+                      <div>
+                        <p className="font-semibold text-amber-800 flex items-center gap-1.5">
+                          <ShieldAlert className="w-3.5 h-3.5 shrink-0" /> Clock-ins denied in the last 48h
+                        </p>
+                        <p className="text-amber-700 mt-1">If these came from the shop WiFi, its internet IP has changed. Allow it so staff can clock in.</p>
+                      </div>
+                      {denied.map(d => (
+                        <div key={d.ip} className="flex items-center justify-between gap-3 rounded-lg bg-white/70 border border-amber-100 px-2.5 py-2">
+                          <div className="min-w-0">
+                            <p className="font-mono text-slate-800 break-all">{d.ip}</p>
+                            <p className="text-slate-500">
+                              {d.attempts} {d.attempts === 1 ? 'attempt' : 'attempts'} · last {new Date(d.lastAt).toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-xs shrink-0 bg-white"
+                            isLoading={allowIpMutation.isPending && allowIpMutation.variables?.rule === d.rule}
+                            onClick={() => allowIpMutation.mutate({ shop, rule: d.rule })}
+                          >
+                            Allow
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="mt-auto pt-4 border-t border-slate-100 flex gap-2">
+                    <Button variant="outline" size="sm" className="flex-1" onClick={() => handleEdit(shop)}>
+                      <Edit2 className="h-3.5 w-3.5 mr-1.5" /> Edit
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-200"
+                      onClick={() => handleDelete(shop.id)}
+                      aria-label={`Delete ${shop.name}`}
+                      title="Delete shop"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            )
+          })}
           {shops.length === 0 && !showForm && (
             <div className="col-span-full text-center p-16 border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50/50">
               <Store className="w-12 h-12 mx-auto mb-4 text-slate-300" />
