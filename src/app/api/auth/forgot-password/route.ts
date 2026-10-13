@@ -1,6 +1,6 @@
 import { NextResponse, after } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { sendNotificationEmail, escapeHtml } from '@/lib/mail'
+import { sendNotificationEmail, escapeHtml, emailButton } from '@/lib/mail'
 import { issuePasswordToken, RESET_TOKEN_TTL_MS } from '@/lib/tokens'
 import { getBaseUrl } from '@/lib/url'
 import { readJson } from '@/lib/api-auth'
@@ -30,17 +30,12 @@ async function sendResetEmail(email: string) {
 
   await sendNotificationEmail({
     to: user.email,
-    subject: 'Password Reset Request',
-    html: `
-      <h2>Password Reset Request</h2>
-      <p>Hello ${escapeHtml(user.name)},</p>
-      <p>Someone recently requested a password reset for your account. If this was you, please click the button below to set a new password.</p>
-      <p><strong>This link will expire in 30 minutes.</strong></p>
-      <br />
-      <a href="${resetUrl}" style="display:inline-block;padding:12px 24px;background-color:#3b82f6;color:white;text-decoration:none;border-radius:6px;font-weight:bold;">Reset Password</a>
-      <br /><br />
-      <p>If you did not request this, you can safely ignore this email.</p>
-    `
+    subject: 'Reset your password',
+    html: `<h2 style="margin:0 0 12px;">Reset your password</h2>
+           <p>Hello ${escapeHtml(user.name)},</p>
+           <p>We received a request to reset the password for your staff account. If this was you, click the button below to choose a new password.</p>
+           ${emailButton(resetUrl, 'Choose a new password')}
+           <p style="color:#64748b;font-size:13px;">This link expires in 30 minutes. If you did not request this, you can ignore this email.</p>`
   })
 }
 

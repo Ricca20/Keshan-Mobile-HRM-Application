@@ -17,6 +17,8 @@ export const DEFAULT_SETTINGS = {
   MIN_HOURS_FOR_FULL_DAY: 4,
   OT_RATE_PER_HOUR: 1000,
   WEEKLY_OFF_DAYS: '0,6', // 0 = Sunday … 6 = Saturday; empty = no weekly off days
+  LUNCH_DURATION_MINS: 60,
+  LUNCH_PENALTY_POINTS: 1,
 }
 
 export type Settings = typeof DEFAULT_SETTINGS
@@ -37,6 +39,8 @@ export const settingsSchema = z
     MIN_HOURS_FOR_FULL_DAY: z.coerce.number().min(0).max(24),
     OT_RATE_PER_HOUR: amount,
     WEEKLY_OFF_DAYS: z.string().regex(/^([0-6](,[0-6])*)?$/, 'Comma-separated day numbers 0-6'),
+    LUNCH_DURATION_MINS: z.coerce.number().int().min(5).max(240),
+    LUNCH_PENALTY_POINTS: z.coerce.number().int().min(0).max(100),
   })
   .partial()
   .strict()

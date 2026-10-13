@@ -1,7 +1,24 @@
 import { prisma } from '@/lib/prisma'
-import { sendNotificationEmail, escapeHtml } from '@/lib/mail'
+import { sendNotificationEmail, escapeHtml, emailButton } from '@/lib/mail'
+import { getBaseUrl } from '@/lib/url'
 
 export const VERIFICATION_WINDOW_MS = 2 * 60 * 1000
+
+/** Emails the employee a link to confirm an active-work check. */
+export async function sendVerificationEmail(
+  employee: { name: string; email: string },
+  verificationId: string,
+  intro: string
+) {
+  await sendNotificationEmail({
+    to: employee.email,
+    subject: 'Work check: please confirm within 2 minutes',
+    html: `<p>Hello <strong>${escapeHtml(employee.name)}</strong>,</p>
+           <p>${escapeHtml(intro)}</p>
+           <p>Please confirm within <strong>2 minutes</strong> while connected to the shop WiFi. You can also confirm from the pop-up in the app.</p>
+           ${emailButton(`${getBaseUrl()}/verify/${verificationId}`, 'Confirm I am working')}`
+  })
+}
 
 /**
  * Marks expired PENDING verifications as MISSED and adds one penalty point each.
@@ -49,7 +66,7 @@ export async function expireVerifications(): Promise<number> {
     for (const admin of admins) {
       await sendNotificationEmail({
         to: admin.email,
-        subject: 'Missed Work Verification - PhoneShop HRM',
+        subject: 'Missed work check',
         html: missed.map(m =>
           `<p><strong>${escapeHtml(m.name)}</strong> missed a random active work verification check (processed ${escapeHtml(time)}).
            A penalty point has been <strong>automatically added</strong>. Their current total is <strong>${m.points} point(s)</strong>.</p>`

@@ -1,10 +1,11 @@
-import { prisma } from '@/lib/prisma'
+import { prisma, INTERACTIVE_TX } from '@/lib/prisma'
 import { calculateLeaveDays } from '@/lib/leave'
 import { requireUser, readJson } from '@/lib/api-auth'
 import { dateStrSchema, validate } from '@/lib/validation'
 import { getSettings, weeklyOffDays } from '@/lib/settings'
 import { colomboDateStr, addDays, dbDate } from '@/lib/time'
-import { escapeHtml, sendNotificationEmail } from '@/lib/mail'
+import { escapeHtml, emailButton, sendNotificationEmail } from '@/lib/mail'
+import { getBaseUrl } from '@/lib/url'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import type { Prisma } from '@/generated/prisma/client'
@@ -53,7 +54,7 @@ export async function GET(req: Request) {
     })
 
     return NextResponse.json(requests)
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to fetch leave requests' }, { status: 500 })
   }
 }
@@ -98,10 +99,12 @@ export async function POST(req: Request) {
       const leaveType = await tx.leaveType.findUnique({ where: { id: leaveTypeId } })
       if (!leaveType || !leaveType.isActive) return { error: 'Invalid leave type' }
 
-      const balance = await tx.leaveBalance.findUnique({
-        where: { userId_leaveTypeId_year: { userId, leaveTypeId, year } }
+      // A request for a year without balances yet (e.g. next January) gets the standard allowance
+      const balance = await tx.leaveBalance.upsert({
+        where: { userId_leaveTypeId_year: { userId, leaveTypeId, year } },
+        create: { userId, leaveTypeId, year, totalDays: leaveType.daysAllowed, usedDays: 0 },
+        update: {},
       })
-      if (!balance) return { error: 'No leave balance found for this type. Contact Admin.' }
 
       // Pending requests reserve days so several requests can't overspend the balance
       const pending = await tx.leaveRequest.aggregate({
@@ -130,7 +133,7 @@ export async function POST(req: Request) {
         data: { userId, leaveTypeId, startDate, endDate, totalDays, reason, status: 'PENDING' }
       })
       return { leaveRequest }
-    })
+    }, INTERACTIVE_TX)
 
     if ('error' in result) {
       return NextResponse.json({ error: result.error }, { status: 400 })
@@ -153,11 +156,11 @@ export async function POST(req: Request) {
       for (const admin of admins) {
         await sendNotificationEmail({
           to: admin.email,
-          subject: 'New Leave Request - PhoneShop HRM',
+          subject: `Leave request from ${employee.name.replace(/[\r\n]+/g, ' ')}`,
           html: `<p><strong>${escapeHtml(employee.name)}</strong> has requested ${totalDays} day(s) of leave.</p>
                  <p><strong>Reason:</strong> ${escapeHtml(reason)}</p>
                  <p><strong>Dates:</strong> ${startStr} to ${endStr}</p>
-                 <p>Please log in to the HRM system to review.</p>`
+                 ${emailButton(`${getBaseUrl()}/admin/leave`, 'Review request')}`
         })
       }
     }

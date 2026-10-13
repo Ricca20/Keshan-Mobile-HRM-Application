@@ -22,6 +22,10 @@ export async function processDailyAttendance(userId: string, date: Date, setting
   const attendanceDate = dbDate(dateStr) // key for the @db.Date column
   const key = { userId_date: { userId, date: attendanceDate } }
 
+  // A record an admin corrected by hand is kept as is until the admin resets it
+  const existing = await prisma.dailyAttendance.findUnique({ where: key })
+  if (existing?.updatedBy) return existing
+
   const logs = await prisma.clockLog.findMany({
     where: { userId, timestamp: { gte: start, lte: end }, isValid: true },
     orderBy: { timestamp: 'asc' },
@@ -54,6 +58,33 @@ export async function processDailyAttendance(userId: string, date: Date, setting
   const firstIn = logs.find(l => l.type === 'IN')?.timestamp
   const lastOut = [...logs].reverse().find(l => l.type === 'OUT')?.timestamp
 
+  const { isLate, lateMinutes, isHalfDay, otHours } = evaluateWorkedDay(dateStr, firstIn, lastOut, s)
+
+  const status = isHalfDay ? 'HALF_DAY' : 'PRESENT'
+
+  return prisma.dailyAttendance.upsert({
+    where: key,
+    create: {
+      userId, date: attendanceDate, clockIn: firstIn, clockOut: lastOut,
+      status, isLate, lateMinutes, isHalfDay, otHours,
+    },
+    update: {
+      clockIn: firstIn ?? null, clockOut: lastOut ?? null,
+      status, isLate, lateMinutes, isHalfDay, otHours,
+    },
+  })
+}
+
+/**
+ * Late / half-day / OT rules for one Colombo calendar day, given the first clock-in
+ * and last clock-out. Shared by automatic processing and admin corrections.
+ */
+export function evaluateWorkedDay(
+  dateStr: string,
+  firstIn: Date | undefined,
+  lastOut: Date | undefined,
+  s: Settings
+) {
   let isLate = false
   let lateMinutes = 0
   let isHalfDay = false
@@ -91,17 +122,5 @@ export async function processDailyAttendance(userId: string, date: Date, setting
     isHalfDay = true
   }
 
-  const status = isHalfDay ? 'HALF_DAY' : 'PRESENT'
-
-  return prisma.dailyAttendance.upsert({
-    where: key,
-    create: {
-      userId, date: attendanceDate, clockIn: firstIn, clockOut: lastOut,
-      status, isLate, lateMinutes, isHalfDay, otHours,
-    },
-    update: {
-      clockIn: firstIn ?? null, clockOut: lastOut ?? null,
-      status, isLate, lateMinutes, isHalfDay, otHours,
-    },
-  })
+  return { isLate, lateMinutes, isHalfDay, otHours }
 }

@@ -1,8 +1,8 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { FileText, CalendarDays, Wallet, TrendingDown, TrendingUp, Download, CheckCircle2, AlertTriangle } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { FileText, CalendarDays, Wallet, TrendingDown, TrendingUp, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
 import { useState } from 'react'
 import { formatCurrency } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -36,7 +36,6 @@ export default function EmployeePaysheetsPage() {
   
   const [isAcknowledgeOpen, setIsAcknowledgeOpen] = useState(false)
   const [isDisputeOpen, setIsDisputeOpen] = useState(false)
-  const [disputeReason, setDisputeReason] = useState('')
 
   const acknowledgeMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -286,7 +285,6 @@ export default function EmployeePaysheetsPage() {
             isOpen={isDisputeOpen}
             onClose={() => setIsDisputeOpen(false)}
             onSubmit={(value) => {
-              setDisputeReason(value)
               disputeMutation.mutate({ id: selectedPaysheet.id, reason: value })
             }}
             title="Dispute Payment"

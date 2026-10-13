@@ -116,6 +116,7 @@ export function calculatePaysheet(
     lateDeduction: round2(lateDeduction),
     halfDaysTotal,
     halfDayDeduction: round2(halfDayDeduction),
+    penaltyPointsCharged: penaltyBulks * settings.PENALTY_THRESHOLD,
     netPay: calculateNetPay(baseSalary, otPay, deductions, 0),
     status: 'DRAFT' as const,
   }

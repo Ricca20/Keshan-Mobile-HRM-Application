@@ -23,7 +23,6 @@ export default function PaysheetDetailPage() {
   const toast = useToast()
   const [isFinalizeModalOpen, setIsFinalizeModalOpen] = useState(false)
   const [isPaidModalOpen, setIsPaidModalOpen] = useState(false)
-  const [paymentReference, setPaymentReference] = useState('')
 
   const { data: ps, isLoading } = useQuery<any>({
     queryKey: ['paysheet', id],
@@ -381,7 +380,6 @@ export default function PaysheetDetailPage() {
         isOpen={isPaidModalOpen}
         onClose={() => setIsPaidModalOpen(false)}
         onSubmit={(value) => {
-          setPaymentReference(value)
           markPaidMutation.mutate(value)
         }}
         title="Mark as Paid"

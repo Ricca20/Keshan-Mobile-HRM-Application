@@ -41,7 +41,7 @@ export async function GET(req: Request) {
         'Cache-Control': 'no-store',
       }
     })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to export paysheets' }, { status: 500 })
   }
 }

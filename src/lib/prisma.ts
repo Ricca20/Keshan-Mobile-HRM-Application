@@ -24,3 +24,9 @@ export const prisma =
   })
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+
+/**
+ * Options for interactive transactions. The 5s default is too tight when a request
+ * waits on a per-employee advisory lock or the database is slow to answer.
+ */
+export const INTERACTIVE_TX = { maxWait: 10_000, timeout: 20_000 }

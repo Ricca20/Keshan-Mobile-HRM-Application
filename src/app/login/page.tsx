@@ -11,10 +11,8 @@ import {
   ShieldCheck,
   ArrowLeft,
   Wifi,
-  Clock,
   TreePalm,
   Receipt,
-  CheckCircle2,
   Fingerprint,
   Eye,
   EyeOff,
@@ -44,7 +42,7 @@ export default function LoginPage() {
       })
 
       if (res?.error) {
-        setError('Invalid email or password.')
+        setError('Invalid email or password. After 5 wrong attempts the account is locked for 15 minutes. Use "Forgot password" to unlock it right away.')
         toast.error('Login failed')
       } else {
         toast.success('Login success')
@@ -55,7 +53,8 @@ export default function LoginPage() {
         router.refresh()
       }
     } catch {
-      setError('Something went wrong. Please try again.')
+      // Also reached when the server rate-limits the request (no JSON body)
+      setError('Could not sign in right now. Check your internet connection, wait a minute, and try again.')
       toast.error('Login failed')
     } finally {
       setIsLoading(false)

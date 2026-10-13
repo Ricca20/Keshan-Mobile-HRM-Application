@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { requireUser } from '@/lib/api-auth'
 import { NextResponse } from 'next/server'
+import { colomboYear } from '@/lib/time'
 
 export async function GET(req: Request) {
   const guard = await requireUser()
@@ -17,13 +18,13 @@ export async function GET(req: Request) {
     }
 
     const balances = await prisma.leaveBalance.findMany({
-      where: { userId, year: new Date().getFullYear() },
+      where: { userId, year: colomboYear() },
       include: { leaveType: true },
       orderBy: { leaveType: { name: 'asc' } }
     })
 
     return NextResponse.json(balances)
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to fetch leave balances' }, { status: 500 })
   }
 }

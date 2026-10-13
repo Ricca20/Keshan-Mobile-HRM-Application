@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getSessionUser } from '@/lib/api-auth'
 import { colomboDateStr, colomboDayRange, dbDate } from '@/lib/time'
 import { prisma } from '@/lib/prisma'
+import { expireLunches } from '@/lib/lunch'
 import {
   Users,
   Clock,
@@ -21,6 +22,9 @@ export default async function AdminDashboard() {
   const { start: startOfDay, end: endOfDay } = colomboDayRange(todayStr)
   const todayDate = dbDate(todayStr)
 
+  // Catch lunch breaks that ran out since the last sweep, so the counts below are current
+  await expireLunches()
+
   const currentMonth = Number(todayStr.slice(5, 7))
   const currentYear = Number(todayStr.slice(0, 4))
 
@@ -33,7 +37,8 @@ export default async function AdminDashboard() {
     draftPaysheets,
     onLeaveToday,
     recentLeaves,
-    recentLogs
+    recentLogs,
+    lunchesInProgress
   ] = await Promise.all([
     // 1. Total Employees
     prisma.user.count({
@@ -89,10 +94,18 @@ export default async function AdminDashboard() {
       take: 5,
       orderBy: { timestamp: 'desc' },
       include: { user: { select: { name: true } } }
+    }),
+
+    // 9. Lunch breaks running right now
+    prisma.lunchBreak.findMany({
+      where: { date: todayDate, endedAt: null },
+      select: { isOverdue: true }
     })
   ])
 
   const clockedInCount = clockInsToday.length
+  const onLunchCount = lunchesInProgress.length
+  const overdueLunchCount = lunchesInProgress.filter(l => l.isOverdue).length
   const absentCount = Math.max(0, totalEmployees - clockedInCount - onLeaveToday.length)
 
   const statCards = [
@@ -108,7 +121,9 @@ export default async function AdminDashboard() {
     {
       title: 'Clocked In Today',
       value: clockedInCount.toString(),
-      subtitle: 'Currently at work',
+      subtitle: onLunchCount > 0
+        ? `${onLunchCount} on lunch now${overdueLunchCount > 0 ? ` (${overdueLunchCount} overdue)` : ''}`
+        : 'Currently at work',
       icon: Clock,
       iconBg: 'bg-emerald-50',
       iconColor: 'text-emerald-500',

@@ -29,7 +29,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     }
 
     return NextResponse.json(paysheet)
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to fetch paysheet' }, { status: 500 })
   }
 }
@@ -75,7 +75,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       }
     })
     return NextResponse.json(result)
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to update paysheet' }, { status: 500 })
   }
 }

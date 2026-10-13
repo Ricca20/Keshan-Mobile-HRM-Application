@@ -20,7 +20,7 @@ const LOCKOUT_MS = 15 * 60 * 1000
 // Compared against when the user doesn't exist, so response timing doesn't leak that either
 const DUMMY_HASH = bcrypt.hashSync('timing-equalizer-not-a-real-password', 12)
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+export const { handlers, auth } = NextAuth({
   providers: [
     CredentialsProvider({
       name: 'credentials',

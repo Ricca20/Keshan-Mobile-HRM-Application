@@ -8,8 +8,11 @@
  */
 const store = new Map<string, { count: number; resetAt: number }>()
 
-export const RATE_LIMITS: Record<string, { max: number; windowMs: number }> = {
-  '/api/auth/callback/credentials': { max: 10, windowMs: 60_000 },
+// Keyed by client IP. Every phone on a shop's WiFi shares one public IP, so the login
+// limit must allow a whole shift signing in together; per-account lockout (lib/auth.ts)
+// is what stops password guessing.
+const RATE_LIMITS: Record<string, { max: number; windowMs: number }> = {
+  '/api/auth/callback/credentials': { max: 60, windowMs: 60_000 },
   '/api/auth/forgot-password': { max: 5, windowMs: 60_000 },
   '/api/auth/reset-password': { max: 10, windowMs: 60_000 },
 }

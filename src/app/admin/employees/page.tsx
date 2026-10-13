@@ -2,13 +2,13 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Edit2, Ban, CheckCircle2, User, Building, Banknote } from 'lucide-react'
+import { Plus, Edit2, Ban, CheckCircle2, User, Building, Banknote, Send, Copy, MessageCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/toast'
-import { ConfirmModal } from '@/components/ui/modal'
+import { ConfirmModal, Modal } from '@/components/ui/modal'
 import { formatCurrency } from '@/lib/utils'
 
 type Shop = {
@@ -33,6 +33,7 @@ export default function AdminEmployeesPage() {
   const [formData, setFormData] = useState<Partial<Employee>>({})
   const [showForm, setShowForm] = useState(false)
   const toast = useToast()
+  const [invite, setInvite] = useState<{ name: string, url: string } | null>(null)
   const [confirmState, setConfirmState] = useState<{ isOpen: boolean, id: string, currentStatus: boolean }>({
     isOpen: false,
     id: '',
@@ -83,6 +84,30 @@ export default function AdminEmployeesPage() {
       toast.error(err.message)
     }
   })
+
+  const inviteMutation = useMutation({
+    mutationFn: async (employee: Employee) => {
+      const res = await fetch(`/api/employees/${employee.id}/invite`, { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Failed to send setup link')
+      return { name: employee.name, url: data.setupUrl as string }
+    },
+    onSuccess: (result) => {
+      setInvite(result)
+      toast.success('Setup email sent')
+    },
+    onError: (err: Error) => toast.error(err.message)
+  })
+
+  const copyInvite = async () => {
+    if (!invite) return
+    try {
+      await navigator.clipboard.writeText(invite.url)
+      toast.success('Link copied')
+    } catch {
+      toast.error('Could not copy. Select the link and copy it manually.')
+    }
+  }
 
   const toggleActiveMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: string, isActive: boolean }) => {
@@ -255,10 +280,22 @@ export default function AdminEmployeesPage() {
                   </div>
                 </div>
 
-                <div className="flex gap-2 justify-end mt-auto pt-4 border-t border-slate-100">
+                <div className="flex flex-wrap gap-2 justify-end mt-auto pt-4 border-t border-slate-100">
                   <Button variant="outline" size="sm" className="flex-1" onClick={() => handleEdit(employee)}>
                     <Edit2 className="h-3.5 w-3.5 mr-1.5" /> Edit
                   </Button>
+                  {employee.isActive && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      title="Email a new password setup link (older links stop working)"
+                      isLoading={inviteMutation.isPending && inviteMutation.variables?.id === employee.id}
+                      onClick={() => inviteMutation.mutate(employee)}
+                    >
+                      <Send className="h-3.5 w-3.5 mr-1.5" /> Setup Link
+                    </Button>
+                  )}
                   {employee.isActive ? (
                     <Button variant="outline" size="sm" className="flex-1 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-200" onClick={() => handleToggleActive(employee.id, true)}>
                       <Ban className="h-3.5 w-3.5 mr-1.5" /> Deactivate
@@ -282,6 +319,36 @@ export default function AdminEmployeesPage() {
           )}
         </div>
       )}
+
+      <Modal isOpen={invite !== null} onClose={() => setInvite(null)} title={`Setup link for ${invite?.name ?? ''}`}>
+        {invite && (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">
+              A setup email was sent. If it doesn&apos;t arrive (check the spam folder), share this link directly.
+              It works once and expires in 7 days.
+            </p>
+            <input
+              readOnly
+              value={invite.url}
+              onFocus={e => e.target.select()}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-mono text-slate-700"
+            />
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Button variant="outline" className="flex-1" onClick={copyInvite}>
+                <Copy className="w-4 h-4 mr-1.5" /> Copy Link
+              </Button>
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(`Set up your staff account password: ${invite.url}`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 inline-flex items-center justify-center rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold px-4 py-2.5"
+              >
+                <MessageCircle className="w-4 h-4 mr-1.5" /> Share on WhatsApp
+              </a>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <ConfirmModal 
         isOpen={confirmState.isOpen}

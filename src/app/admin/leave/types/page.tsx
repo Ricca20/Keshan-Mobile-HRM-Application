@@ -160,7 +160,7 @@ export default function LeaveTypesPage() {
                       </p>
                     </div>
                   </div>
-                  <Button variant="ghost" size="icon" className="text-slate-400 hover:text-blue-600 hover:bg-blue-50 opacity-0 group-hover:opacity-100 transition-all shrink-0" onClick={() => openModal(type)}>
+                  <Button variant="ghost" size="icon" className="text-slate-400 hover:text-blue-600 hover:bg-blue-50 sm:opacity-0 sm:group-hover:opacity-100 transition-all shrink-0" onClick={() => openModal(type)}>
                     <Edit2 className="w-5 h-5" />
                   </Button>
                 </div>

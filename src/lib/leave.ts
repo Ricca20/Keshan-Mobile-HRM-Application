@@ -1,5 +1,5 @@
 import { prisma } from './prisma'
-import { dayOfWeek, eachDateStr } from './time'
+import { colomboYear, dayOfWeek, eachDateStr } from './time'
 
 /**
  * Counts leave days between two calendar dates (inclusive), skipping the shop's
@@ -14,7 +14,7 @@ export function calculateLeaveDays(startStr: string, endStr: string, offDays: nu
  * Existing balances are left untouched.
  */
 export async function syncLeaveBalances(leaveTypeId: string, daysAllowed: number) {
-  const currentYear = new Date().getFullYear()
+  const currentYear = colomboYear()
 
   const employees = await prisma.user.findMany({
     where: { isActive: true, role: 'EMPLOYEE' },
@@ -33,16 +33,38 @@ export async function syncLeaveBalances(leaveTypeId: string, daysAllowed: number
   })
 }
 
-/** Creates this year's balances for one employee for every active leave type. */
-export async function createBalancesForEmployee(userId: string) {
-  const currentYear = new Date().getFullYear()
+/**
+ * Creates a year's balance for every active employee and active leave type that doesn't
+ * have one. Idempotent; run daily so a new year never starts without balances.
+ */
+export async function ensureYearBalances(year: number = colomboYear()): Promise<number> {
+  const [employees, leaveTypes] = await Promise.all([
+    prisma.user.findMany({ where: { isActive: true, role: 'EMPLOYEE' }, select: { id: true } }),
+    prisma.leaveType.findMany({ where: { isActive: true } }),
+  ])
+
+  const { count } = await prisma.leaveBalance.createMany({
+    data: employees.flatMap(user => leaveTypes.map(leaveType => ({
+      userId: user.id,
+      leaveTypeId: leaveType.id,
+      year,
+      totalDays: leaveType.daysAllowed,
+      usedDays: 0,
+    }))),
+    skipDuplicates: true,
+  })
+  return count
+}
+
+/** Creates a year's balances (default: this year) for one employee for every active leave type. */
+export async function createBalancesForEmployee(userId: string, year: number = colomboYear()) {
   const leaveTypes = await prisma.leaveType.findMany({ where: { isActive: true } })
 
   await prisma.leaveBalance.createMany({
     data: leaveTypes.map(lt => ({
       userId,
       leaveTypeId: lt.id,
-      year: currentYear,
+      year,
       totalDays: lt.daysAllowed,
       usedDays: 0,
     })),

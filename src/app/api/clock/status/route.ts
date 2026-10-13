@@ -2,6 +2,8 @@ import { prisma } from '@/lib/prisma'
 import { lastShiftLog } from '@/lib/clock'
 import { requireUser } from '@/lib/api-auth'
 import { colomboDateStr, colomboDayRange } from '@/lib/time'
+import { expireLunches, todaysLunch } from '@/lib/lunch'
+import { getSettings } from '@/lib/settings'
 import { NextResponse } from 'next/server'
 
 export async function GET() {
@@ -22,8 +24,23 @@ export async function GET() {
           orderBy: { timestamp: 'desc' },
         })
 
-    return NextResponse.json({ isClockedIn, lastLog })
-  } catch (error) {
+    // Penalize this employee's lunch right away if it just ran out
+    await expireLunches(userId)
+    const [lunch, settings] = await Promise.all([todaysLunch(userId), getSettings()])
+
+    return NextResponse.json({
+      isClockedIn,
+      lastLog,
+      lunch: lunch && {
+        startedAt: lunch.startedAt,
+        dueAt: lunch.dueAt,
+        endedAt: lunch.endedAt,
+        isOverdue: lunch.isOverdue,
+      },
+      lunchMinutes: settings.LUNCH_DURATION_MINS,
+      serverTime: new Date(),
+    })
+  } catch {
     return NextResponse.json({ error: 'Failed to fetch status' }, { status: 500 })
   }
 }

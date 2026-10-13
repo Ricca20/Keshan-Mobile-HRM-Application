@@ -1,0 +1,32 @@
+name: Random Work Verifications & Lunch Checks
+
+# Vercel Hobby only runs crons once a day, so this triggers the random active-work checks and the overdue-lunch
+# sweep during shop hours instead. Required repository secrets:
+#   APP_URL      - production URL, e.g. https://your-app.vercel.app (no trailing slash)
+#   CRON_SECRET  - same value as the CRON_SECRET env var in Vercel
+# GitHub may delay scheduled runs by a few minutes; that is fine for random checks.
+
+on:
+  schedule:
+    - cron: '*/10 2-15 * * *' # Every 10 min, 02:00-15:59 UTC = 07:30-21:29 Sri Lanka Time (covers OT)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger verification cron
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "::error::APP_URL and CRON_SECRET secrets must both be set."
+            exit 1
+          fi
+          curl --fail-with-body -sS --max-time 60 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/cron/verifications"

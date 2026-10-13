@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { requireUser } from '@/lib/api-auth'
-import { escapeHtml, sendNotificationEmail } from '@/lib/mail'
+import { escapeHtml, emailButton, sendNotificationEmail } from '@/lib/mail'
+import { getBaseUrl } from '@/lib/url'
 import { NextResponse } from 'next/server'
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -27,11 +28,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         include: { user: { select: { id: true, name: true, email: true } } }
       })
 
-      // Penalty points were charged on this paysheet, so start counting again
-      await tx.user.update({
-        where: { id: paysheet.userId },
-        data: { penaltyPoints: 0 }
-      })
+      // Remove only the points this sheet deducted for. Points below the threshold, or
+      // earned after the draft was generated, carry over to the next paysheet.
+      // (Atomic decrement, so a penalty added at the same moment is not lost.)
+      if (paysheet.penaltyPointsCharged > 0) {
+        await tx.user.update({
+          where: { id: paysheet.userId },
+          data: { penaltyPoints: { decrement: paysheet.penaltyPointsCharged } }
+        })
+        await tx.user.updateMany({
+          where: { id: paysheet.userId, penaltyPoints: { lt: 0 } },
+          data: { penaltyPoints: 0 }
+        })
+      }
 
       return paysheet
     })
@@ -56,14 +65,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     await sendNotificationEmail({
       to: updated.user.email,
-      subject: `Paysheet Finalized - ${monthName} ${updated.year}`,
+      subject: `Your paysheet for ${monthName} ${updated.year} is ready`,
       html: `<p>Hello <strong>${escapeHtml(updated.user.name)}</strong>,</p>
-             <p>Your paysheet for <strong>${monthName} ${updated.year}</strong> has been finalized by HR.</p>
-             <p>Please log in to the HRM system to view your net pay and full breakdown.</p>`
+             <p>Your paysheet for <strong>${monthName} ${updated.year}</strong> has been finalized.</p>
+             <p>Sign in to see your net pay and the full breakdown.</p>
+             ${emailButton(`${getBaseUrl()}/employee/paysheet`, 'View my paysheet')}`
     })
 
     return NextResponse.json(updated)
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to finalize paysheet' }, { status: 500 })
   }
 }

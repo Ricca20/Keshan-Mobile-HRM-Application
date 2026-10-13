@@ -4,7 +4,7 @@ import { fromZonedTime } from 'date-fns-tz'
  * All business dates are in Sri Lanka time. Servers (Vercel) run in UTC, so never
  * rely on the process timezone (`setHours`, `getDate`, date-fns `parse`, ...).
  */
-export const TZ = 'Asia/Colombo'
+const TZ = 'Asia/Colombo'
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/
@@ -22,6 +22,11 @@ export function isTimeStr(value: unknown): value is string {
 /** 'YYYY-MM-DD' of the given instant in Colombo. */
 export function colomboDateStr(date: Date = new Date()): string {
   return date.toLocaleDateString('en-CA', { timeZone: TZ })
+}
+
+/** Current calendar year in Colombo (differs from UTC for the first 5.5 hours of Jan 1). */
+export function colomboYear(date: Date = new Date()): number {
+  return Number(colomboDateStr(date).slice(0, 4))
 }
 
 /** UTC instants for the start and end of a Colombo calendar day. */

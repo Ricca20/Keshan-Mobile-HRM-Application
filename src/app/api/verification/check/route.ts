@@ -19,7 +19,7 @@ export async function GET() {
     })
 
     return NextResponse.json(verification)
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to check verification' }, { status: 500 })
   }
 }

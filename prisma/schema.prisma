@@ -1,5 +1,4 @@
-// PhoneShop HRM — Full Database Schema
-// All 8 models for the HRM system
+// PhoneShop HRM — database schema
 
 generator client {
   provider = "prisma-client"
@@ -37,6 +36,7 @@ model User {
   notifications    Notification[]
   verifications    WorkVerification[]
   dailyAttendances DailyAttendance[]
+  lunchBreaks      LunchBreak[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -70,7 +70,7 @@ model ClockLog {
   timestamp    DateTime  @default(now())
   ipAddress    String
   isValid      Boolean   @default(false)
-  flagReason   String? // "GPS_FAIL" | "IP_FAIL" | "BOTH_FAIL" | null
+  flagReason   String? // "IP_FAIL" | "AUTO_CLOSED_END_OF_DAY" | null
   overriddenBy String? // admin userId who manually overrode
   overrideNote String?
 
@@ -143,28 +143,30 @@ enum LeaveStatus {
 }
 
 model PaySheet {
-  id               String         @id @default(cuid())
-  userId           String
-  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  month            Int // 1–12
-  year             Int
-  baseSalary       Float
-  paidDays         Int
-  unpaidDays       Int
-  deductions       Float          @default(0)
-  bonuses          Float          @default(0)
-  deductionNote    String?
-  bonusNote        String?
-  otHoursTotal     Float          @default(0)
-  otPay            Float          @default(0)
-  lateMinutesTotal Int            @default(0)
-  lateDeduction    Float          @default(0)
-  halfDaysTotal    Int            @default(0)
-  halfDayDeduction Float          @default(0)
-  netPay           Float
-  status           PaySheetStatus @default(DRAFT)
-  finalizedAt      DateTime?
-  finalizedBy      String?
+  id                   String         @id @default(cuid())
+  userId               String
+  user                 User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month                Int // 1–12
+  year                 Int
+  baseSalary           Float
+  paidDays             Int
+  unpaidDays           Int
+  deductions           Float          @default(0)
+  bonuses              Float          @default(0)
+  deductionNote        String?
+  bonusNote            String?
+  otHoursTotal         Float          @default(0)
+  otPay                Float          @default(0)
+  lateMinutesTotal     Int            @default(0)
+  lateDeduction        Float          @default(0)
+  halfDaysTotal        Int            @default(0)
+  halfDayDeduction     Float          @default(0)
+  // Penalty points this sheet deducted for; removed from the employee's total on finalize
+  penaltyPointsCharged Int            @default(0)
+  netPay               Float
+  status               PaySheetStatus @default(DRAFT)
+  finalizedAt          DateTime?
+  finalizedBy          String?
 
   // Two-way verification
   paymentReference String?
@@ -193,7 +195,7 @@ model Notification {
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   title   String
   message String
-  type    String // "LEAVE_REQUEST", "LEAVE_APPROVED", "LEAVE_REJECTED", "PAYROLL"
+  type    String // LEAVE_*, PAYROLL, VERIFICATION_MISSED, LUNCH_OVERDUE, CLOCK_DENIED, SYSTEM
   isRead  Boolean @default(false)
 
   createdAt DateTime @default(now())
@@ -272,4 +274,24 @@ enum AttendanceStatus {
   ABSENT
   HALF_DAY
   LEAVE
+}
+
+/// One lunch break per employee per Colombo day. "Lunch In" starts it, "Lunch Out" ends it.
+/// Not ending it before dueAt adds penalty points once (isOverdue) and alerts the admins.
+model LunchBreak {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      DateTime  @db.Date
+  startedAt DateTime  @default(now())
+  dueAt     DateTime
+  endedAt   DateTime?
+  startIp   String
+  endIp     String?
+  isOverdue Boolean   @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, date])
+  @@index([endedAt, dueAt])
 }

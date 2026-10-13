@@ -2,12 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Settings, Save, AlertCircle, Info, Clock, CalendarDays, DollarSign } from 'lucide-react'
+import { Settings, Save, AlertCircle, Info, Clock, DollarSign, UtensilsCrossed } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useToast } from '@/components/ui/toast'
-import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import { formatCurrency } from '@/lib/utils'
 
 export default function AdminSettingsPage() {
@@ -27,8 +26,10 @@ export default function AdminSettingsPage() {
   const [minHoursForFullDay, setMinHoursForFullDay] = useState('4')
   const [otRatePerHour, setOtRatePerHour] = useState('1000')
   const [weeklyOffDays, setWeeklyOffDays] = useState<number[]>([0, 6])
+  const [lunchDurationMins, setLunchDurationMins] = useState('60')
+  const [lunchPenaltyPoints, setLunchPenaltyPoints] = useState('1')
 
-  const { data: settings, isLoading } = useQuery({
+  const { data: settings } = useQuery({
     queryKey: ['settings'],
     queryFn: async () => {
       const res = await fetch('/api/settings')
@@ -51,9 +52,8 @@ export default function AdminSettingsPage() {
       if (typeof settings.WEEKLY_OFF_DAYS === 'string') {
         setWeeklyOffDays(settings.WEEKLY_OFF_DAYS.split(',').filter(Boolean).map(Number))
       }
-      if (typeof settings.WEEKLY_OFF_DAYS === 'string') {
-        setWeeklyOffDays(settings.WEEKLY_OFF_DAYS.split(',').filter(Boolean).map(Number))
-      }
+      if (settings.LUNCH_DURATION_MINS) setLunchDurationMins(settings.LUNCH_DURATION_MINS)
+      if (settings.LUNCH_PENALTY_POINTS) setLunchPenaltyPoints(settings.LUNCH_PENALTY_POINTS)
     }
   }, [settings])
 
@@ -73,6 +73,8 @@ export default function AdminSettingsPage() {
           MIN_HOURS_FOR_FULL_DAY: minHoursForFullDay,
           OT_RATE_PER_HOUR: otRatePerHour,
           WEEKLY_OFF_DAYS: [...weeklyOffDays].sort().join(','),
+          LUNCH_DURATION_MINS: lunchDurationMins,
+          LUNCH_PENALTY_POINTS: lunchPenaltyPoints,
         })
       })
       if (!res.ok) {
@@ -85,7 +87,7 @@ export default function AdminSettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['settings'] })
       toast.success('Settings saved successfully')
     },
-    onError: (err: any) => toast.error(err.message)
+    onError: (err: Error) => toast.error(err.message)
   })
 
   const threshold = Number(penaltyThreshold) || 10
@@ -224,9 +226,46 @@ export default function AdminSettingsPage() {
       <Card className="border-slate-200 shadow-sm">
         <CardHeader className="bg-slate-50/50 border-b border-slate-100">
           <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-2">
+            <UtensilsCrossed className="w-5 h-5 text-amber-500" /> Lunch Break
+          </CardTitle>
+          <CardDescription>Employees tap Lunch In to start their break and Lunch Out (on the shop WiFi) when they return.</CardDescription>
+        </CardHeader>
+        <CardContent className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl">
+            <Input
+              label="Lunch Duration (Mins)"
+              type="number"
+              min="5"
+              max="240"
+              required
+              value={lunchDurationMins}
+              onChange={(e) => setLunchDurationMins(e.target.value)}
+              placeholder="e.g. 60"
+            />
+            <Input
+              label="Penalty Points if Late Back"
+              type="number"
+              min="0"
+              max="100"
+              required
+              value={lunchPenaltyPoints}
+              onChange={(e) => setLunchPenaltyPoints(e.target.value)}
+              placeholder="e.g. 1"
+            />
+          </div>
+          <p className="text-xs text-slate-500 mt-3">
+            If Lunch Out is not tapped in time, the points are added once and admins are notified in the app and by email.
+            Set points to 0 to only notify.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card className="border-slate-200 shadow-sm">
+        <CardHeader className="bg-slate-50/50 border-b border-slate-100">
+          <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-2">
             <AlertCircle className="w-5 h-5 text-red-500" /> Penalty Configuration
           </CardTitle>
-          <CardDescription>Configure how missed verification points translate into salary deductions.</CardDescription>
+          <CardDescription>Configure how penalty points (missed verifications and late lunch returns) translate into salary deductions.</CardDescription>
         </CardHeader>
         <CardContent className="p-6 space-y-6">
           <div className="max-w-lg space-y-5">

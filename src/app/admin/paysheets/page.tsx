@@ -152,7 +152,7 @@ export default function AdminPaysheetsPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         <Link href={`/admin/paysheets/${ps.id}`}>
-                          <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button variant="ghost" size="sm" className="sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                             <Eye className="w-4 h-4 mr-2 text-slate-400" /> View Details
                           </Button>
                         </Link>

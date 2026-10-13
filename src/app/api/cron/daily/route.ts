@@ -4,10 +4,15 @@ import { getSettings } from '@/lib/settings'
 import { isAuthorizedCron } from '@/lib/cron'
 import { AUTO_CLOSED_REASON } from '@/lib/clock'
 import { expireVerifications } from '@/lib/verification'
+import { expireLunches } from '@/lib/lunch'
+import { ensureYearBalances } from '@/lib/leave'
 import { colomboDateStr } from '@/lib/time'
 import { NextResponse } from 'next/server'
 
 // Scheduled at 18:30 UTC = 00:00 Asia/Colombo
+// Loops over every employee; give it room beyond the default function timeout
+export const maxDuration = 60
+
 export async function GET(req: Request) {
   if (!isAuthorizedCron(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -17,6 +22,9 @@ export async function GET(req: Request) {
     const now = new Date()
     // The Colombo day that just ended. 12h back is robust to the cron firing a little early or late.
     const yesterday = new Date(now.getTime() - 12 * 60 * 60 * 1000)
+
+    // 0. Penalize lunch breaks that ran out without Lunch Out
+    await expireLunches()
 
     // 1. Close open shifts (forgot to clock out)
     const activeUsers = await prisma.user.findMany({
@@ -75,7 +83,10 @@ export async function GET(req: Request) {
     })
     await prisma.passwordResetToken.deleteMany({ where: { expiresAt: { lt: now } } })
 
-    // 5. Monthly backup reminder (first day of the month in Colombo)
+    // 5. Leave balances for the new year (no-op once they exist)
+    await ensureYearBalances().catch(err => console.error('Leave balance rollover failed:', err))
+
+    // 6. Monthly backup reminder (first day of the month in Colombo)
     let reminderSent = false
     if (colomboDateStr(now).endsWith('-01')) {
       const admins = await prisma.user.findMany({ where: { role: 'ADMIN', isActive: true } })

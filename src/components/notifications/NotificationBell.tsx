@@ -2,9 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Bell, Check, Clock, FileText, CalendarDays, Receipt, ShieldAlert } from 'lucide-react'
+import { Bell, Check, Clock, FileText, CalendarDays, Receipt, ShieldAlert, UtensilsCrossed, Wifi } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useSession } from 'next-auth/react'
 
@@ -25,6 +24,8 @@ function getNotificationRoute(type: string, role: string): string | null {
       case 'LEAVE_REJECTED': return '/admin/leave'
       case 'PAYROLL': return '/admin/paysheets'
       case 'VERIFICATION_MISSED': return '/admin/verification'
+      case 'LUNCH_OVERDUE': return '/admin/attendance'
+      case 'CLOCK_DENIED': return '/admin/shops'
       case 'SYSTEM': return '/admin/dashboard'
       default: return '/admin/dashboard'
     }
@@ -32,7 +33,8 @@ function getNotificationRoute(type: string, role: string): string | null {
     switch (type) {
       case 'LEAVE_APPROVED': return '/employee/leave'
       case 'LEAVE_REJECTED': return '/employee/leave'
-      case 'PAYROLL': return '/employee/paysheets'
+      case 'PAYROLL': return '/employee/paysheet'
+      case 'LUNCH_OVERDUE': return '/employee/clock'
       case 'SYSTEM': return '/employee/dashboard'
       default: return '/employee/dashboard'
     }
@@ -98,6 +100,8 @@ export function NotificationBell() {
       case 'LEAVE_REJECTED': return <Check className="w-4 h-4 text-red-500" />
       case 'PAYROLL': return <Receipt className="w-4 h-4 text-blue-500" />
       case 'VERIFICATION_MISSED': return <ShieldAlert className="w-4 h-4 text-orange-500" />
+      case 'LUNCH_OVERDUE': return <UtensilsCrossed className="w-4 h-4 text-red-500" />
+      case 'CLOCK_DENIED': return <Wifi className="w-4 h-4 text-amber-500" />
       case 'SYSTEM': return <FileText className="w-4 h-4 text-slate-500" />
       default: return <FileText className="w-4 h-4 text-slate-500" />
     }

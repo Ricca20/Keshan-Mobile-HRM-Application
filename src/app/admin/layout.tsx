@@ -9,7 +9,6 @@ import {
   Users,
   Store,
   Clock,
-  Calendar,
   TreePalm,
   Receipt,
   BarChart3,
@@ -17,7 +16,6 @@ import {
   Menu,
   X,
   ChevronRight,
-  Fingerprint,
   ShieldAlert,
   Settings,
 } from 'lucide-react'

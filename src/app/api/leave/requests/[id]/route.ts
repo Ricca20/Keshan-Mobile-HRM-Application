@@ -1,10 +1,11 @@
-import { prisma } from '@/lib/prisma'
+import { prisma, INTERACTIVE_TX } from '@/lib/prisma'
 import { requireUser, readJson } from '@/lib/api-auth'
 import { validate } from '@/lib/validation'
 import { processDailyAttendance } from '@/lib/attendance'
 import { getSettings } from '@/lib/settings'
 import { colomboDateStr, colomboTime, dbDateStr, eachDateStr } from '@/lib/time'
-import { escapeHtml, sendNotificationEmail } from '@/lib/mail'
+import { escapeHtml, emailButton, sendNotificationEmail } from '@/lib/mail'
+import { getBaseUrl } from '@/lib/url'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
@@ -72,7 +73,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         }
       })
       return { updatedRequest }
-    })
+    }, INTERACTIVE_TX)
 
     if ('error' in result) {
       return NextResponse.json({ error: result.error }, { status: 400 })
@@ -102,11 +103,11 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     await sendNotificationEmail({
       to: updated.user.email,
-      subject: `${title} - PhoneShop HRM`,
+      subject: `Your leave request was ${status === 'APPROVED' ? 'approved' : 'rejected'}`,
       html: `<p>Hello <strong>${escapeHtml(updated.user.name)}</strong>,</p>
              <p>Your leave request for ${updated.totalDays} day(s) of ${escapeHtml(updated.leaveType.name)} has been <strong>${status}</strong>.</p>
              ${approverNote ? `<p><strong>Note:</strong> ${escapeHtml(approverNote)}</p>` : ''}
-             <p>Please log in to the HRM system for more details.</p>`
+             ${emailButton(`${getBaseUrl()}/employee/leave`, 'View my leave')}`
     })
 
     return NextResponse.json(updated)

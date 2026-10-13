@@ -7,14 +7,12 @@ import Link from 'next/link'
 import {
   LayoutDashboard,
   Clock,
-  Calendar,
   TreePalm,
   Receipt,
   LogOut,
   Menu,
   X,
   ChevronRight,
-  Fingerprint,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'

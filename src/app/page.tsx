@@ -10,7 +10,6 @@ import {
   BarChart3,
   Smartphone,
   Wifi,
-  CheckCircle2,
   Zap,
   Users,
   Store,

@@ -74,6 +74,6 @@ export const shopSchema = z.object({
   allowedIp: z
     .string()
     .trim()
-    .max(500)
-    .refine(isValidAllowedIpList, 'Enter BYPASS or one or more valid IP addresses separated by commas'),
+    .max(1000)
+    .refine(isValidAllowedIpList, 'Enter BYPASS, or IP addresses / ranges (e.g. 2402:d000:1:2::/64) separated by commas'),
 })

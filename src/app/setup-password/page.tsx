@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
 import { Lock, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 
 import { Suspense } from 'react'

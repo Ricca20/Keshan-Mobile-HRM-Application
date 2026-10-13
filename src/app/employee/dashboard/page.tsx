@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { formatCurrency } from '@/lib/utils'
 import { AUTO_CLOSED_REASON } from '@/lib/clock'
+import { colomboYear } from '@/lib/time'
 
 export default async function EmployeeDashboard() {
   const session = await auth()
@@ -23,7 +24,7 @@ export default async function EmployeeDashboard() {
 
   // 2. This Week's Attendance (Clock Ins in last 7 days)
   const sevenDaysAgo = new Date()
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+  sevenDaysAgo.setTime(sevenDaysAgo.getTime() - 7 * 24 * 60 * 60 * 1000)
   const recentDays = await prisma.clockLog.count({
     where: {
       userId,
@@ -34,7 +35,7 @@ export default async function EmployeeDashboard() {
   })
 
   // 3. Leave Left
-  const currentYear = new Date().getFullYear()
+  const currentYear = colomboYear()
   const balances = await prisma.leaveBalance.findMany({
     where: { userId, year: currentYear }
   })
@@ -53,6 +54,8 @@ export default async function EmployeeDashboard() {
   })
 
   const firstName = session?.user?.name?.split(' ')[0] ?? 'there'
+  const colomboHour = Number(new Date().toLocaleString('en-GB', { timeZone: 'Asia/Colombo', hour: '2-digit', hour12: false }))
+  const greeting = colomboHour < 12 ? 'Good morning' : colomboHour < 17 ? 'Good afternoon' : 'Good evening'
 
   return (
     <div className="animate-fade-in space-y-6 max-w-5xl mx-auto pt-4 pb-24">
@@ -65,10 +68,10 @@ export default async function EmployeeDashboard() {
         <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div>
             <p className="text-blue-100 font-medium mb-1 tracking-wide uppercase text-sm">
-              {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'Asia/Colombo' })}
             </p>
             <h1 className="text-3xl sm:text-4xl font-black tracking-tight mb-2">
-              Good morning, {firstName}! 👋
+              {greeting}, {firstName}! 👋
             </h1>
             <p className="text-blue-50 max-w-md leading-relaxed opacity-90">
               Ready for a great day at {shopName}? Here's your quick overview for today.

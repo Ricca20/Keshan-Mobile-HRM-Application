@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 export const RESET_TOKEN_TTL_MS = 30 * 60 * 1000 // 30 minutes
 export const SETUP_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 
-export function hashToken(token: string): string {
+function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex')
 }
 

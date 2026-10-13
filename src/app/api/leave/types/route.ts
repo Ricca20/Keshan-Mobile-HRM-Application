@@ -14,7 +14,7 @@ export async function GET() {
       orderBy: { name: 'asc' }
     })
     return NextResponse.json(types)
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to fetch leave types' }, { status: 500 })
   }
 }

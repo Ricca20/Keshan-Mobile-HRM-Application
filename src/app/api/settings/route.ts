@@ -11,7 +11,7 @@ export async function GET() {
   try {
     const settings = await getSettings()
     return NextResponse.json(Object.fromEntries(Object.entries(settings).map(([k, v]) => [k, String(v)])))
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 })
   }
 }
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
       )
     )
     return NextResponse.json({ success: true })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to update settings' }, { status: 500 })
   }
 }

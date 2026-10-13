@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Edit2, Trash2, MapPin, Wifi, Store } from 'lucide-react'
+import { Plus, Edit2, Trash2, MapPin, Wifi, Store, ShieldAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -15,6 +15,13 @@ type Shop = {
   name: string
   address: string
   allowedIp: string
+  recentDenied?: { ip: string, rule: string, attempts: number, lastAt: string }[]
+}
+
+/** Adds an IP rule to a comma-separated list (replacing BYPASS), skipping duplicates. */
+function addIpRule(list: string | undefined, rule: string) {
+  const current = (list ?? '').split(',').map(s => s.trim()).filter(s => s && s !== 'BYPASS')
+  return current.includes(rule) ? current.join(', ') : [...current, rule].join(', ')
 }
 
 export default function AdminShopsPage() {
@@ -54,15 +61,32 @@ export default function AdminShopsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['shops'] })
-      queryClient.invalidateQueries({ queryKey: ['shops'] })
       setShowForm(false)
       setIsEditing(null)
       setFormData({})
       toast.success('Shop saved successfully')
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(err.message)
     }
+  })
+
+  const allowIpMutation = useMutation({
+    mutationFn: async ({ shop, rule }: { shop: Shop, rule: string }) => {
+      const res = await fetch(`/api/shops/${shop.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: shop.name, address: shop.address, allowedIp: addIpRule(shop.allowedIp, rule) }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Failed to update shop')
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['shops'] })
+      toast.success('Network allowed. Employees on it can clock in now.')
+    },
+    onError: (err: Error) => toast.error(err.message)
   })
 
   const deleteMutation = useMutation({
@@ -77,7 +101,7 @@ export default function AdminShopsPage() {
       queryClient.invalidateQueries({ queryKey: ['shops'] })
       toast.success('Shop deleted successfully')
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(err.message)
     }
   })
@@ -161,9 +185,10 @@ export default function AdminShopsPage() {
                           try {
                             const res = await fetch('/api/ip')
                             const data = await res.json()
-                            setFormData({...formData, allowedIp: data.ip})
-                            toast.success('IP Address fetched successfully!')
-                          } catch (err) {
+                            if (!res.ok || !data.rule) throw new Error()
+                            setFormData({...formData, allowedIp: addIpRule(formData.allowedIp, data.rule)})
+                            toast.success(`Added ${data.rule}. Remember to click Save.`)
+                          } catch {
                             toast.error('Failed to fetch IP. Visit whatismyip.com manually.')
                           }
                         }}
@@ -189,13 +214,13 @@ export default function AdminShopsPage() {
                     <input
                       required
                       className="block w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none hover:border-slate-400 transition-all"
-                      placeholder="e.g. 203.0.113.1, 192.168.1.5" 
+                      placeholder="e.g. 203.0.113.1, 2402:d000:1234:5678::/64" 
                       value={formData.allowedIp || ''} 
                       onChange={e => setFormData({...formData, allowedIp: e.target.value})}
                     />
                   </div>
                   <div className="text-xs text-slate-500 space-y-1 mt-1">
-                    <p>Employees must be connected to one of these IPs. Use commas for multiple IPs.</p>
+                    <p>Employees must be connected to one of these IPs or ranges. Use commas for several. Auto-Detect adds the network you are on now (for IPv6 it adds the whole /64 range, because phones change their IPv6 address regularly). Detect on both a phone and a laptop connected to the shop WiFi.</p>
                     <p className="text-amber-600 bg-amber-50 p-2 rounded-lg border border-amber-100 mt-2">
                       <strong>SLT Users:</strong> If employees can't clock in, connect your phone to the shop WiFi, click "Auto-Detect My IP" above, and save. You can also manually check your IP at <a href="https://whatismyip.com" target="_blank" rel="noopener noreferrer" className="underline font-semibold hover:text-amber-800">whatismyip.com</a>.
                     </p>
@@ -235,7 +260,7 @@ export default function AdminShopsPage() {
                       {shop.name}
                     </CardTitle>
                   </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50" onClick={() => handleEdit(shop)}>
                       <Edit2 className="h-4 w-4" />
                     </Button>
@@ -258,12 +283,36 @@ export default function AdminShopsPage() {
                         CHECK DISABLED
                       </Badge>
                     ) : (
-                      <Badge variant="secondary" className="font-mono text-xs bg-white border-slate-200">
+                      <Badge variant="secondary" className="font-mono text-xs bg-white border-slate-200 break-all whitespace-normal text-right">
                         {shop.allowedIp}
                       </Badge>
                     )}
                   </div>
                 </div>
+                {shop.allowedIp !== 'BYPASS' && shop.recentDenied && shop.recentDenied.length > 0 && (
+                  <div className="mt-3 p-3 rounded-xl border border-amber-200 bg-amber-50 text-xs space-y-2">
+                    <p className="font-semibold text-amber-800 flex items-center gap-1.5">
+                      <ShieldAlert className="w-3.5 h-3.5" /> Clock-ins denied in the last 48h
+                    </p>
+                    <p className="text-amber-700">If these came from the shop WiFi, the shop&apos;s internet IP has changed. Allow it so staff can clock in.</p>
+                    {shop.recentDenied.map(d => (
+                      <div key={d.ip} className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-slate-700 break-all">
+                          {d.ip} <span className="text-slate-500 font-sans">· {d.attempts}x, last {new Date(d.lastAt).toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit' })}</span>
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs shrink-0"
+                          isLoading={allowIpMutation.isPending && allowIpMutation.variables?.rule === d.rule}
+                          onClick={() => allowIpMutation.mutate({ shop, rule: d.rule })}
+                        >
+                          Allow
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}

@@ -41,7 +41,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     })
 
     return NextResponse.json({ success: true, points: user?.penaltyPoints ?? 0 })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to penalize' }, { status: 500 })
   }
 }
