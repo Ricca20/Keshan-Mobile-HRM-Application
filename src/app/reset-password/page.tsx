@@ -1,14 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
+import { signOut } from 'next-auth/react'
 import Link from 'next/link'
 import { Lock, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 
 import { Suspense } from 'react'
 
 function ResetPasswordForm() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const token = searchParams.get('token')
 
@@ -106,8 +106,9 @@ function ResetPasswordForm() {
               <p className="text-sm text-slate-600 mb-6">
                 You can now use your new password to log in to your account.
               </p>
+              {/* End any session already open in this browser (e.g. an admin), or login would skip to that dashboard */}
               <button 
-                onClick={() => router.push('/login')}
+                onClick={() => signOut({ redirectTo: '/login' })}
                 className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-xl shadow-sm text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all"
               >
                 Go to login
