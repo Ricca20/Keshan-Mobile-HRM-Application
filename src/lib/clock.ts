@@ -89,6 +89,8 @@ export function ipv6Network64(ip: string): string | null {
 }
 
 const DENIED_ALERT_WINDOW_MS = 30 * 60 * 1000
+// A clock-out this soon after clocking in is almost always a double tap
+const MIN_SHIFT_BEFORE_OUT_MS = 60 * 1000
 
 type ClockResult = { status: number; body: Record<string, unknown> }
 
@@ -116,6 +118,9 @@ export async function recordClock(
     }
     if (type === 'OUT' && !isOpen) {
       return { status: 400, body: { error: 'Not clocked in.' } }
+    }
+    if (type === 'OUT' && last && Date.now() - last.timestamp.getTime() < MIN_SHIFT_BEFORE_OUT_MS) {
+      return { status: 400, body: { error: 'You clocked in less than a minute ago, so this clock-out was ignored. You are still clocked in.' } }
     }
     if (type === 'OUT') {
       const onLunch = await tx.lunchBreak.findFirst({

@@ -5,6 +5,7 @@ import { Clock, LogIn, LogOut, AlertCircle, CheckCircle2, UtensilsCrossed, Alert
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { ConfirmModal } from '@/components/ui/modal'
 import { useEffect, useRef, useState } from 'react'
 
 type Lunch = { startedAt: string, dueAt: string, endedAt: string | null, isOverdue: boolean }
@@ -28,6 +29,14 @@ function formatDuration(ms: number) {
   const sec = total % 60
   const mmss = `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
   return h > 0 ? `${h}:${mmss}` : mmss
+}
+
+/** 125 min -> "2 h 5 min" */
+function humanDuration(ms: number) {
+  const mins = Math.floor(ms / 60000)
+  if (mins < 1) return 'less than a minute'
+  const h = Math.floor(mins / 60)
+  return [h ? `${h} h` : '', mins % 60 ? `${mins % 60} min` : ''].filter(Boolean).join(' ')
 }
 
 class ActionError extends Error {
@@ -65,6 +74,10 @@ export default function EmployeeClockPage() {
   const queryClient = useQueryClient()
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [deniedIp, setDeniedIp] = useState<string | null>(null)
+  // Text for the clock-out confirmation; null when it is closed
+  const [confirmOut, setConfirmOut] = useState<string | null>(null)
+  // Brief lock after each clock action so a double tap can't immediately undo it
+  const [cooldown, setCooldown] = useState(false)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
   // Difference between the server clock and this phone's clock, so the countdown can't be gamed
@@ -115,9 +128,13 @@ export default function EmployeeClockPage() {
       const data = await postAction(`/api/clock/${type}`)
       return { type, data }
     },
-    onSuccess: ({ type }) => {
+    onSuccess: ({ type, data }) => {
       setSuccessMsg(`Successfully clocked ${type}.`)
+      // Show the new state right away instead of waiting for the refetch
+      queryClient.setQueryData<ClockStatus>(['clockStatus'], old => old && { ...old, isClockedIn: type === 'in', lastLog: data.log })
       queryClient.invalidateQueries({ queryKey: ['clockStatus'] })
+      setCooldown(true)
+      setTimeout(() => setCooldown(false), 3000)
     },
     onError: (err: Error) => {
       setErrorMsg(err.message)
@@ -142,6 +159,8 @@ export default function EmployeeClockPage() {
       )
       setNow(Date.now() + offsetRef.current)
       queryClient.invalidateQueries({ queryKey: ['clockStatus'] })
+      setCooldown(true)
+      setTimeout(() => setCooldown(false), 3000)
     },
     onError: (err: Error) => {
       setErrorMsg(err.message)
@@ -151,11 +170,16 @@ export default function EmployeeClockPage() {
 
   const handleAction = () => {
     if (status?.isClockedIn) {
-      clockMutation.mutate('out')
+      const since = status.lastLog ? new Date(status.lastLog.timestamp) : null
+      setConfirmOut(
+        (since ? `You clocked in at ${colomboTime(since.toISOString())} (${humanDuration(Date.now() - since.getTime())} ago). ` : '') +
+        'Only clock out when you are leaving for the day. For lunch, use Lunch In instead.'
+      )
     } else {
       clockMutation.mutate('in')
     }
   }
+
 
   return (
     <div className="max-w-md mx-auto space-y-6 pt-8">
@@ -216,7 +240,7 @@ export default function EmployeeClockPage() {
                 size="lg" 
                 className={`w-full h-16 text-lg rounded-xl shadow-lg transition-all ${status?.isClockedIn ? 'bg-orange-500 hover:bg-orange-600 shadow-orange-500/20' : 'bg-blue-500 hover:bg-blue-600 shadow-blue-500/20'}`}
                 onClick={handleAction}
-                disabled={clockMutation.isPending || onLunch}
+                disabled={clockMutation.isPending || onLunch || cooldown}
               >
                 {clockMutation.isPending ? (
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-2"></div>
@@ -271,6 +295,7 @@ export default function EmployeeClockPage() {
                   className="w-full h-14 text-lg rounded-xl bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-500/20"
                   onClick={() => lunchMutation.mutate('end')}
                   isLoading={lunchMutation.isPending}
+                  disabled={cooldown}
                 >
                   <LogIn className="mr-2 h-5 w-5" /> Lunch Out (back to work)
                 </Button>
@@ -298,6 +323,7 @@ export default function EmployeeClockPage() {
                   className="w-full h-14 text-lg rounded-xl bg-amber-500 hover:bg-amber-600 shadow-lg shadow-amber-500/20"
                   onClick={() => lunchMutation.mutate('start')}
                   isLoading={lunchMutation.isPending}
+                  disabled={cooldown}
                 >
                   <UtensilsCrossed className="mr-2 h-5 w-5" /> Lunch In (start break)
                 </Button>
@@ -306,6 +332,18 @@ export default function EmployeeClockPage() {
           </CardContent>
         </Card>
       )}
+      <ConfirmModal
+        isOpen={confirmOut !== null}
+        onClose={() => setConfirmOut(null)}
+        onConfirm={() => {
+          setConfirmOut(null)
+          clockMutation.mutate('out')
+        }}
+        title="Clock out now?"
+        description={confirmOut ?? ''}
+        confirmText="Clock Out"
+        variant="danger"
+      />
     </div>
   )
 }

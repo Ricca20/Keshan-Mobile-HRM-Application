@@ -1,8 +1,10 @@
 import { redirect } from 'next/navigation'
 import { getSessionUser } from '@/lib/api-auth'
-import { colomboDateStr, colomboDayRange, dbDate } from '@/lib/time'
+import { colomboDateStr, colomboDayRange, dayOfWeek, dbDate } from '@/lib/time'
+import { getSettings, weeklyOffDays } from '@/lib/settings'
 import { prisma } from '@/lib/prisma'
 import { expireLunches } from '@/lib/lunch'
+import { AUTO_CLOSED_REASON } from '@/lib/clock'
 import {
   Users,
   Clock,
@@ -45,10 +47,11 @@ export default async function AdminDashboard() {
       where: { role: 'EMPLOYEE', isActive: true }
     }),
     
-    // 2. Clocked In Today (Unique users who have an 'IN' log today)
+    // 2. Clocked In Today (unique users with a successful clock-in today; denied attempts don't count)
     prisma.clockLog.findMany({
       where: {
         type: 'IN',
+        isValid: true,
         timestamp: { gte: startOfDay, lte: endOfDay }
       },
       distinct: ['userId']
@@ -59,10 +62,10 @@ export default async function AdminDashboard() {
       where: { status: 'PENDING' }
     }),
     
-    // 4. Flagged Entries (Clock logs that were flagged today)
+    // 4. Flagged Entries: clock attempts denied today (not the midnight auto clock-outs)
     prisma.clockLog.count({
       where: {
-        isValid: false,
+        flagReason: 'IP_FAIL',
         timestamp: { gte: startOfDay, lte: endOfDay }
       }
     }),
@@ -106,7 +109,9 @@ export default async function AdminDashboard() {
   const clockedInCount = clockInsToday.length
   const onLunchCount = lunchesInProgress.length
   const overdueLunchCount = lunchesInProgress.filter(l => l.isOverdue).length
-  const absentCount = Math.max(0, totalEmployees - clockedInCount - onLeaveToday.length)
+  // Nobody is "absent" on the shop's weekly day off
+  const isDayOff = weeklyOffDays(await getSettings()).includes(dayOfWeek(todayStr))
+  const absentCount = isDayOff ? 0 : Math.max(0, totalEmployees - clockedInCount - onLeaveToday.length)
 
   const statCards = [
     {
@@ -159,7 +164,7 @@ export default async function AdminDashboard() {
     {
       title: 'Absent Today',
       value: absentCount.toString(),
-      subtitle: 'Scheduled but not in',
+      subtitle: isDayOff ? 'Weekly day off' : 'Scheduled but not in',
       icon: UserX,
       iconBg: 'bg-slate-100',
       iconColor: 'text-slate-500',
@@ -220,12 +225,18 @@ export default async function AdminDashboard() {
               {recentLogs.map(log => (
                 <div key={log.id} className="flex justify-between items-center text-sm border-b border-slate-100 pb-2 last:border-0">
                   <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${log.type === 'IN' ? 'bg-green-500' : 'bg-orange-500'}`} />
+                    <div className={`w-2 h-2 rounded-full shrink-0 ${!log.isValid ? 'bg-slate-300' : log.type === 'IN' ? 'bg-green-500' : 'bg-orange-500'}`} />
                     <span className="font-medium text-slate-700">{log.user.name}</span>
-                    <span className="text-slate-400">clocked {log.type.toLowerCase()}</span>
+                    {log.flagReason === 'IP_FAIL' ? (
+                      <span className="text-red-500">clock-{log.type.toLowerCase()} denied (not on shop WiFi)</span>
+                    ) : log.flagReason === AUTO_CLOSED_REASON ? (
+                      <span className="text-slate-400">auto clocked out (forgot)</span>
+                    ) : (
+                      <span className="text-slate-400">clocked {log.type.toLowerCase()}</span>
+                    )}
                   </div>
-                  <span className="text-xs text-slate-400">
-                    {new Date(log.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' })}
+                  <span className="text-xs text-slate-400 whitespace-nowrap">
+                    {new Date(log.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Colombo' })}
                   </span>
                 </div>
               ))}

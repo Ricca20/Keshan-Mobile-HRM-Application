@@ -19,6 +19,8 @@ type OverdueLunch = {
 }
 
 const MINUTE = 60 * 1000
+// Ending lunch this soon after starting it is almost always a double tap
+const MIN_LUNCH_MS = MINUTE
 
 function colomboClock(date: Date) {
   return date.toLocaleTimeString('en-US', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit' })
@@ -113,6 +115,9 @@ export async function endLunch(userId: string, shopId: string, ip: string): Prom
 
     const lunch = await activeLunch(userId, tx)
     if (!lunch) return { error: { status: 400, body: { error: 'You are not on a lunch break.' } } }
+    if (Date.now() - lunch.startedAt.getTime() < MIN_LUNCH_MS) {
+      return { error: { status: 400, body: { error: 'Your lunch started less than a minute ago, so this was ignored. You are still on lunch.' } } }
+    }
 
     if (!(await shopAllows(tx, shopId, ip))) {
       return { error: { status: 403, body: { error: 'You must be back on the shop WiFi to end your lunch break.' } } }

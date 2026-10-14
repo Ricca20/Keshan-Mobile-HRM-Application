@@ -56,7 +56,10 @@ export async function processDailyAttendance(userId: string, date: Date, setting
   }
 
   const firstIn = logs.find(l => l.type === 'IN')?.timestamp
-  const lastOut = [...logs].reverse().find(l => l.type === 'OUT')?.timestamp
+  // If the day's latest entry is a clock-in, that shift is still open (or was never
+  // closed), so an earlier clock-out is not the end of the working day.
+  const lastLog = logs[logs.length - 1]
+  const lastOut = lastLog.type === 'OUT' ? lastLog.timestamp : undefined
 
   const { isLate, lateMinutes, isHalfDay, otHours } = evaluateWorkedDay(dateStr, firstIn, lastOut, s)
 

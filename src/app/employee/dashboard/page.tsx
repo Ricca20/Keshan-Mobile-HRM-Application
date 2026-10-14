@@ -5,7 +5,8 @@ import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { formatCurrency } from '@/lib/utils'
 import { AUTO_CLOSED_REASON } from '@/lib/clock'
-import { colomboYear } from '@/lib/time'
+import { addDays, colomboDateStr, colomboYear, dayOfWeek, dbDate, eachDateStr } from '@/lib/time'
+import { getSettings, weeklyOffDays } from '@/lib/settings'
 
 export default async function EmployeeDashboard() {
   const session = await auth()
@@ -22,17 +23,17 @@ export default async function EmployeeDashboard() {
   const isClockedIn = lastLog?.type === 'IN'
   const shopName = lastLog?.shop?.name || 'Assigned Shop'
 
-  // 2. This Week's Attendance (Clock Ins in last 7 days)
-  const sevenDaysAgo = new Date()
-  sevenDaysAgo.setTime(sevenDaysAgo.getTime() - 7 * 24 * 60 * 60 * 1000)
-  const recentDays = await prisma.clockLog.count({
-    where: {
-      userId,
-      type: 'IN',
-      isValid: true,
-      timestamp: { gte: sevenDaysAgo }
-    }
-  })
+  // 2. Days worked in the last 7 calendar days (today included), out of the working days
+  const today = colomboDateStr()
+  const weekStart = addDays(today, -6)
+  const [recentDays, settings] = await Promise.all([
+    prisma.dailyAttendance.count({
+      where: { userId, date: { gte: dbDate(weekStart), lte: dbDate(today) }, status: { in: ['PRESENT', 'HALF_DAY'] } },
+    }),
+    getSettings(),
+  ])
+  const offDays = weeklyOffDays(settings)
+  const workingDays = eachDateStr(weekStart, today).filter(d => !offDays.includes(dayOfWeek(d))).length
 
   // 3. Leave Left
   const currentYear = colomboYear()
@@ -150,10 +151,10 @@ export default async function EmployeeDashboard() {
               <div className="mt-auto">
                 <div className="flex items-baseline gap-2">
                   <span className="text-5xl font-black text-slate-900 tracking-tighter">{recentDays}</span>
-                  <span className="text-lg font-medium text-slate-500">days</span>
+                  <span className="text-lg font-medium text-slate-500">of {workingDays} working {workingDays === 1 ? 'day' : 'days'}</span>
                 </div>
                 <div className="w-full bg-slate-100 h-1.5 rounded-full mt-4 overflow-hidden">
-                  <div className="bg-blue-500 h-full rounded-full" style={{ width: `${Math.min((recentDays / 5) * 100, 100)}%` }}></div>
+                  <div className="bg-blue-500 h-full rounded-full" style={{ width: `${workingDays > 0 ? Math.min((recentDays / workingDays) * 100, 100) : 0}%` }}></div>
                 </div>
               </div>
             </div>
