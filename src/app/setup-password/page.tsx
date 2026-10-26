@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { signOut } from 'next-auth/react'
+import Link from 'next/link'
 import { Lock, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 
 import { Suspense } from 'react'
@@ -16,11 +17,19 @@ function SetupPasswordForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
+  const [checking, setChecking] = useState(!!token)
+  const [linkError, setLinkError] = useState('')
 
+  // Check the link up front so a dead link is reported before the password is typed
   useEffect(() => {
-    if (!token) {
-      setError('Invalid or missing setup token. Please ask your administrator to resend the welcome email.')
-    }
+    if (!token) return
+    let cancelled = false
+    fetch(`/api/auth/reset-password?token=${encodeURIComponent(token)}`)
+      .then(res => res.json())
+      .then(data => { if (!cancelled && data.valid === false) setLinkError(data.error) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setChecking(false) })
+    return () => { cancelled = true }
   }, [token])
 
   const hasMinLength = password.length >= 8
@@ -51,27 +60,48 @@ function SetupPasswordForm() {
 
       const data = await res.json()
       
+      if (data.code === 'INVALID_TOKEN') {
+        return setLinkError(data.error)
+      }
       if (!res.ok) {
         throw new Error(data.error || 'Failed to reset password')
       }
 
       setSuccess(true)
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reset password')
     } finally {
       setLoading(false)
     }
   }
 
-  if (!token) {
+  if (checking) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    )
+  }
+
+  if (!token || linkError) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col justify-center px-4 py-12 sm:px-6 lg:px-8">
         <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
           <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-black text-slate-900 mb-2">Invalid Link</h2>
-          <p className="text-slate-600 mb-6">This setup link is invalid or has expired.</p>
-          <p className="text-sm text-slate-500 font-medium">
-            Please ask your administrator to resend the welcome email.
+          <h2 className="text-2xl font-black text-slate-900 mb-2">Link no longer works</h2>
+          <p className="text-slate-600 mb-6">
+            {linkError || 'This setup link is incomplete. Open the latest email again, or copy the whole link.'}
+          </p>
+          <div className="flex flex-col gap-3">
+            <Link href="/login" className="text-blue-600 font-bold hover:underline">
+              Already set your password? Sign in
+            </Link>
+            <Link href="/forgot-password" className="text-blue-600 font-bold hover:underline">
+              Email me a new link
+            </Link>
+          </div>
+          <p className="mt-6 text-sm text-slate-500 font-medium">
+            Or ask your administrator to send a new setup link.
           </p>
         </div>
       </div>

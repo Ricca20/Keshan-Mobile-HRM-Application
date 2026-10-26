@@ -17,11 +17,19 @@ function ResetPasswordForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
+  const [checking, setChecking] = useState(!!token)
+  const [linkError, setLinkError] = useState('')
 
+  // Check the link up front so a dead link is reported before the password is typed
   useEffect(() => {
-    if (!token) {
-      setError('Invalid or missing reset token. Please request a new password reset link.')
-    }
+    if (!token) return
+    let cancelled = false
+    fetch(`/api/auth/reset-password?token=${encodeURIComponent(token)}`)
+      .then(res => res.json())
+      .then(data => { if (!cancelled && data.valid === false) setLinkError(data.error) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setChecking(false) })
+    return () => { cancelled = true }
   }, [token])
 
   const hasMinLength = password.length >= 8
@@ -52,25 +60,38 @@ function ResetPasswordForm() {
 
       const data = await res.json()
       
+      if (data.code === 'INVALID_TOKEN') {
+        return setLinkError(data.error)
+      }
       if (!res.ok) {
         throw new Error(data.error || 'Failed to reset password')
       }
 
       setSuccess(true)
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reset password')
     } finally {
       setLoading(false)
     }
   }
 
-  if (!token) {
+  if (checking) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    )
+  }
+
+  if (!token || linkError) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col justify-center px-4 py-12 sm:px-6 lg:px-8">
         <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
           <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-black text-slate-900 mb-2">Invalid Link</h2>
-          <p className="text-slate-600 mb-6">This password reset link is invalid or has expired.</p>
+          <h2 className="text-2xl font-black text-slate-900 mb-2">Link no longer works</h2>
+          <p className="text-slate-600 mb-6">
+            {linkError || 'This password reset link is incomplete. Open the latest email again, or copy the whole link.'}
+          </p>
           <Link href="/forgot-password" className="text-blue-600 font-bold hover:underline">
             Request a new link
           </Link>

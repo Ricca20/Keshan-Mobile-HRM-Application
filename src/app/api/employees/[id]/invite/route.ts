@@ -6,7 +6,7 @@ import { NextResponse } from 'next/server'
 /**
  * POST /api/employees/[id]/invite
  * Re-sends the password setup email (e.g. it went to spam or expired) and returns the
- * link so the admin can share it another way. Older links stop working.
+ * link so the admin can share it another way. Links already sent keep working until one is used.
  */
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const guard = await requireUser('ADMIN')

@@ -3,7 +3,7 @@ import { issuePasswordToken, SETUP_TOKEN_TTL_MS } from '@/lib/tokens'
 import { getBaseUrl } from '@/lib/url'
 
 /**
- * Issues a fresh 7-day password setup link (revoking older ones) and emails it.
+ * Issues a fresh 7-day password setup link and emails it.
  * Returns the link so an admin can also share it directly if the email doesn't arrive.
  */
 export async function sendSetupInvite(employee: { name: string; email: string }): Promise<string> {

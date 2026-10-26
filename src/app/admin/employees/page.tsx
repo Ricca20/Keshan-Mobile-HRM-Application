@@ -306,7 +306,7 @@ export default function AdminEmployeesPage() {
                         variant="outline"
                         size="sm"
                         className="flex-1 whitespace-nowrap"
-                        title="Email a new password setup link (older links stop working)"
+                        title="Email a new password setup link"
                         isLoading={inviteMutation.isPending && inviteMutation.variables?.id === employee.id}
                         onClick={() => inviteMutation.mutate(employee)}
                       >

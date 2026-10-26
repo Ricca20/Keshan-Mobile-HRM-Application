@@ -58,7 +58,7 @@ export async function PUT(
     })
 
     // Outstanding setup/reset links are tied to the old address
-    if (changes.email && changes.email !== target.email) {
+    if (changes.email && changes.email !== target.email.toLowerCase()) {
       await prisma.passwordResetToken.deleteMany({ where: { email: target.email } })
     }
 
